@@ -7,15 +7,21 @@ import { addRandomFootageToClip } from './random-footage';
 
 const mkdir = promisify(fs.mkdir);
 const unlink = promisify(fs.unlink);
+const exists = promisify(fs.exists);
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
 const CLIPS_DIR = path.join(UPLOADS_DIR, 'clips');
+const CACHE_DIR = path.join(UPLOADS_DIR, 'cache');
+
+// Cache for video downloads to avoid re-downloading
+const videoCache = new Map<string, string>();
 
 async function ensureDirectories() {
   try {
     await mkdir(UPLOADS_DIR, { recursive: true });
     await mkdir(CLIPS_DIR, { recursive: true });
+    await mkdir(CACHE_DIR, { recursive: true });
   } catch (error) {
     console.error('Error creating directories:', error);
   }
@@ -48,77 +54,71 @@ export async function processVideoClip(options: ClipOptions): Promise<{
   const outputPath = path.join(CLIPS_DIR, outputFileName);
   
   try {
-    // Try to download and process real video
-    const tempVideoPath = path.join(UPLOADS_DIR, `temp_${youtubeId}_${Date.now()}.mp4`);
+    // Check if we have a cached version of this video
+    let tempVideoPath = videoCache.get(youtubeId);
     
-    try {
-      console.log('Attempting to download video from YouTube...');
-      await downloadVideo(videoUrl, tempVideoPath, quality);
+    if (!tempVideoPath || !(await exists(tempVideoPath))) {
+      // Download and cache the video
+      tempVideoPath = path.join(CACHE_DIR, `${youtubeId}_${quality}.mp4`);
       
-      console.log('Creating video clip from downloaded video...');
-      
-      // If random footage is requested, create clip in temp location first
-      const tempClipPath = options.hasRandomFootage 
-        ? path.join(path.dirname(outputPath), `temp_clip_${Date.now()}.mp4`)
-        : outputPath;
-      
-      console.log('Creating clip with effects:', {
-        zoomLevel: options.zoomLevel,
-        cropX: options.cropX,
-        cropY: options.cropY,
-        brightness: options.brightness,
-        contrast: options.contrast,
-        saturation: options.saturation,
-      });
-      
-      await createClip(tempVideoPath, tempClipPath, startTime, endTime, format, {
-        zoomLevel: options.zoomLevel,
-        cropX: options.cropX,
-        cropY: options.cropY,
-        brightness: options.brightness,
-        contrast: options.contrast,
-        saturation: options.saturation,
-      });
-      
-      // Add random footage if requested
-      if (options.hasRandomFootage) {
-        console.log('Adding random footage to clip...');
-        const duration = endTime - startTime;
-        await addRandomFootageToClip(tempClipPath, outputPath, duration);
-        // Clean up temp clip
-        await unlink(tempClipPath);
-      }
-      
-      // Clean up temp file
-      await unlink(tempVideoPath);
-      
-      const stats = fs.statSync(outputPath);
-      return {
-        filePath: outputPath,
-        fileSize: stats.size
-      };
-      
-    } catch (downloadError) {
-      console.log('YouTube download failed, creating demo video clip...');
-      
-      // Clean up temp file if it exists
       try {
-        if (fs.existsSync(tempVideoPath)) {
-          await unlink(tempVideoPath);
-        }
-      } catch (cleanupError) {
-        console.error('Error cleaning up temp file:', cleanupError);
+        console.log('Downloading video from YouTube...');
+        await downloadVideo(videoUrl, tempVideoPath, quality);
+        videoCache.set(youtubeId, tempVideoPath);
+        console.log('Video cached successfully');
+      } catch (downloadError) {
+        console.log('YouTube download failed, creating demo video clip...');
+        tempVideoPath = path.join(UPLOADS_DIR, `temp_${youtubeId}_${Date.now()}.mp4`);
+        await createDemoVideoClip(tempVideoPath, startTime, endTime, format);
       }
-      
-      // Create a demo video file that represents the clip
-      await createDemoVideoClip(outputPath, startTime, endTime, format);
-      
-      const stats = fs.statSync(outputPath);
-      return {
-        filePath: outputPath,
-        fileSize: stats.size
-      };
+    } else {
+      console.log('Using cached video file');
     }
+    
+    console.log('Creating video clip...');
+    
+    // If random footage is requested, create clip in temp location first
+    const tempClipPath = options.hasRandomFootage 
+      ? path.join(path.dirname(outputPath), `temp_clip_${Date.now()}.mp4`)
+      : outputPath;
+    
+    console.log('Creating clip with effects:', {
+      zoomLevel: options.zoomLevel,
+      cropX: options.cropX,
+      cropY: options.cropY,
+      brightness: options.brightness,
+      contrast: options.contrast,
+      saturation: options.saturation,
+    });
+    
+    await createClip(tempVideoPath, tempClipPath, startTime, endTime, format, {
+      zoomLevel: options.zoomLevel,
+      cropX: options.cropX,
+      cropY: options.cropY,
+      brightness: options.brightness,
+      contrast: options.contrast,
+      saturation: options.saturation,
+    });
+    
+    // Add random footage if requested
+    if (options.hasRandomFootage) {
+      console.log('Adding random footage to clip...');
+      const duration = endTime - startTime;
+      await addRandomFootageToClip(tempClipPath, outputPath, duration);
+      // Clean up temp clip
+      await unlink(tempClipPath);
+    }
+    
+    // Only clean up temp file if it's not cached
+    if (!videoCache.has(youtubeId)) {
+      await unlink(tempVideoPath);
+    }
+    
+    const stats = fs.statSync(outputPath);
+    return {
+      filePath: outputPath,
+      fileSize: stats.size
+    };
     
   } catch (error) {
     console.error('Error in processVideoClip:', error);
@@ -227,7 +227,6 @@ function createClip(inputPath: string, outputPath: string, startTime: number, en
         .videoCodec('libvpx')
         .audioCodec('libvorbis')
         .audioBitrate('128k')
-        .videoQuality(23)
         .format('webm');
     } else {
       // MP4 default with better audio settings
@@ -245,7 +244,8 @@ function createClip(inputPath: string, outputPath: string, startTime: number, en
         console.log('FFmpeg command:', commandLine);
       })
       .on('progress', (progress) => {
-        console.log('Processing: ' + Math.round(progress.percent) + '% done');
+        const percent = progress.percent || 0;
+        console.log('Processing: ' + Math.round(percent) + '% done');
       })
       .on('end', () => {
         console.log('Video clipping completed');
@@ -377,7 +377,8 @@ async function createDemoVideoClip(outputPath: string, startTime: number, endTim
         console.log('FFmpeg demo command:', commandLine);
       })
       .on('progress', (progress) => {
-        console.log('Demo video processing: ' + Math.round(progress.percent) + '% done');
+        const percent = progress.percent || 0;
+        console.log('Demo video processing: ' + Math.round(percent) + '% done');
       })
       .on('end', () => {
         console.log('Demo video clip created successfully');

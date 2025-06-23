@@ -22,8 +22,10 @@ export function log(message: string, source = "express") {
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
     middlewareMode: true,
-    hmr: { server },
-    allowedHosts: true,
+    hmr: { 
+      server,
+      overlay: false, // Disable error overlay for faster development
+    },
   };
 
   const vite = await createViteServer({
@@ -33,11 +35,19 @@ export async function setupVite(app: Express, server: Server) {
       ...viteLogger,
       error: (msg, options) => {
         viteLogger.error(msg, options);
-        process.exit(1);
+        // Don't exit on error in development
+        if (process.env.NODE_ENV === "production") {
+          process.exit(1);
+        }
       },
     },
     server: serverOptions,
     appType: "custom",
+    // Optimize for faster startup
+    optimizeDeps: {
+      ...viteConfig.optimizeDeps,
+      force: false,
+    },
   });
 
   app.use(vite.middlewares);
