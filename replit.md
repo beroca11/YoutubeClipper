@@ -52,7 +52,8 @@ This is a full-stack web application that allows users to create video clips fro
 2. **AI Clip Generation**: Creates intelligent clip suggestions with confidence scores across different categories (highlight, action, scenic)
 3. **Manual Clip Editor**: Provides precise control over clip timing, quality, and format settings
 4. **Real Video Processing**: Downloads actual YouTube videos and creates clips using FFmpeg with progress tracking
-5. **Download System**: Serves actual video files in MP4, WebM, or GIF formats with proper MIME types and file streaming
+5. **Video Editing & Copyright Protection**: Advanced editing features including zoom, crop, color correction, and random footage overlay
+6. **Download System**: Serves actual video files in MP4, WebM, or GIF formats with proper MIME types and file streaming
 
 ### UI Components
 - **Header/Footer**: Navigation and branding

@@ -37,6 +37,14 @@ export interface ClipData {
   downloadUrl?: string;
   isAiGenerated: boolean;
   processingStatus: string;
+  // Video editing features
+  zoomLevel?: number;
+  cropX?: number;
+  cropY?: number;
+  brightness?: number;
+  contrast?: number;
+  saturation?: number;
+  hasRandomFootage?: boolean;
 }
 
 export interface AnalyzeResponse {

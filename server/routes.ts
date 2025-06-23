@@ -119,6 +119,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const clipDataWithDuration = { ...req.body, duration };
       
       const clipData = insertClipSchema.parse(clipDataWithDuration);
+      console.log('Creating clip with video edits:', {
+        zoomLevel: clipData.zoomLevel,
+        cropX: clipData.cropX,
+        cropY: clipData.cropY,
+        brightness: clipData.brightness,
+        contrast: clipData.contrast,
+        saturation: clipData.saturation,
+        hasRandomFootage: clipData.hasRandomFootage
+      });
       
       // Validate the video exists
       const video = await storage.getVideo(clipData.videoId);

@@ -27,6 +27,13 @@ interface ClipOptions {
   quality: string;
   format: string;
   outputFileName: string;
+  zoomLevel?: number;
+  cropX?: number;
+  cropY?: number;
+  brightness?: number;
+  contrast?: number;
+  saturation?: number;
+  hasRandomFootage?: boolean;
 }
 
 export async function processVideoClip(options: ClipOptions): Promise<{

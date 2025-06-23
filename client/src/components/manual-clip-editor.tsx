@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Scissors, Play, Wand2, Crosshair } from "lucide-react";
 import { VideoData, AiSuggestion } from "@/lib/types";
 
+import VideoEditor, { VideoEdits } from "./video-editor";
+
 interface ManualClipEditorProps {
   video: VideoData;
   suggestion?: AiSuggestion;
@@ -17,6 +19,13 @@ interface ManualClipEditorProps {
     quality: string;
     format: string;
     isAiGenerated: boolean;
+    zoomLevel?: number;
+    cropX?: number;
+    cropY?: number;
+    brightness?: number;
+    contrast?: number;
+    saturation?: number;
+    hasRandomFootage?: boolean;
   }) => void;
 }
 
