@@ -4,3 +4,9 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Video processing uploads
+uploads/
+*.mp4
+*.webm
+*.gif
