@@ -48,11 +48,11 @@ This is a full-stack web application that allows users to create video clips fro
    - Associated video references
 
 ### Core Features
-1. **YouTube URL Analysis**: Extracts video metadata using ytdl-core
-2. **AI Clip Generation**: Generates intelligent clip suggestions based on video content
-3. **Manual Clip Editor**: Provides precise control over clip timing and settings
-4. **Processing Pipeline**: Handles clip creation with status tracking
-5. **Download System**: Manages file generation and download links
+1. **YouTube URL Analysis**: Processes YouTube URLs and generates demo video metadata for testing
+2. **AI Clip Generation**: Creates intelligent clip suggestions with confidence scores across different categories
+3. **Manual Clip Editor**: Provides precise control over clip timing, quality, and format settings
+4. **Processing Pipeline**: Simulates clip creation with real-time status tracking and progress updates
+5. **Download System**: Manages mock file generation and download functionality for demonstration
 
 ### UI Components
 - **Header/Footer**: Navigation and branding
