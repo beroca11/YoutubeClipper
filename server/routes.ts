@@ -136,6 +136,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create clip
   app.post("/api/clips", async (req, res) => {
     try {
+      console.log("Received clip data:", JSON.stringify(req.body, null, 2));
       const clipData = insertClipSchema.parse(req.body);
       
       // Validate the video exists
@@ -183,6 +184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
     } catch (error) {
       if (error instanceof z.ZodError) {
+        console.error("Validation error:", error.errors);
         return res.status(400).json({ message: "Invalid clip data", errors: error.errors });
       }
       console.error("Error creating clip:", error);

@@ -53,6 +53,15 @@ export const insertVideoSchema = createInsertSchema(videos).omit({
 export const insertClipSchema = createInsertSchema(clips).omit({
   id: true,
   createdAt: true,
+  duration: true, // We'll calculate this on the server
+}).extend({
+  quality: z.string().optional(),
+  format: z.string().optional(),
+  fileSize: z.number().optional(),
+  fileName: z.string().optional(),
+  downloadUrl: z.string().optional(),
+  isAiGenerated: z.boolean().optional(),
+  processingStatus: z.string().optional(),
 });
 
 export const insertAiSuggestionSchema = createInsertSchema(aiSuggestions).omit({

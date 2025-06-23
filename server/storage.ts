@@ -9,7 +9,7 @@ export interface IStorage {
   // Clip operations
   getClip(id: number): Promise<Clip | undefined>;
   getClipsByVideoId(videoId: number): Promise<Clip[]>;
-  createClip(clip: InsertClip): Promise<Clip>;
+  createClip(clip: InsertClip & { duration: number }): Promise<Clip>;
   updateClipStatus(id: number, status: string, downloadUrl?: string, fileSize?: number): Promise<Clip | undefined>;
   
   // AI Suggestion operations
@@ -70,7 +70,7 @@ export class MemStorage implements IStorage {
     );
   }
 
-  async createClip(insertClip: InsertClip): Promise<Clip> {
+  async createClip(insertClip: InsertClip & { duration: number }): Promise<Clip> {
     const id = this.currentClipId++;
     const clip: Clip = { 
       ...insertClip, 
