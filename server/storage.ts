@@ -82,7 +82,14 @@ export class MemStorage implements IStorage {
       fileName: insertClip.fileName ?? null,
       downloadUrl: insertClip.downloadUrl ?? null,
       isAiGenerated: insertClip.isAiGenerated ?? false,
-      processingStatus: insertClip.processingStatus ?? "pending"
+      processingStatus: insertClip.processingStatus ?? "pending",
+      zoomLevel: insertClip.zoomLevel ?? 1.0,
+      cropX: insertClip.cropX ?? 0,
+      cropY: insertClip.cropY ?? 0,
+      brightness: insertClip.brightness ?? 0,
+      contrast: insertClip.contrast ?? 1.0,
+      saturation: insertClip.saturation ?? 1.0,
+      hasRandomFootage: insertClip.hasRandomFootage ?? false,
     };
     this.clips.set(id, clip);
     return clip;

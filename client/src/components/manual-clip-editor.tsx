@@ -7,6 +7,7 @@ import { Scissors, Play, Wand2, Crosshair } from "lucide-react";
 import { VideoData, AiSuggestion } from "@/lib/types";
 
 import VideoEditor, { VideoEdits } from "./video-editor";
+import PreviewModal from "./preview-modal";
 
 interface ManualClipEditorProps {
   video: VideoData;
@@ -238,14 +239,13 @@ export default function ManualClipEditor({ video, suggestion, onGenerateClip }: 
               </div>
               
               <div className="flex space-x-3">
-                <Button 
-                  variant="outline"
-                  className="flex-1"
+                <PreviewModal 
+                  video={video}
+                  startTime={startTime}
+                  endTime={endTime}
+                  videoEdits={videoEdits}
                   disabled={!isValid}
-                >
-                  <Play className="h-4 w-4 mr-2" />
-                  Preview Clip
-                </Button>
+                />
                 <Button 
                   onClick={handleGenerateClip}
                   disabled={!isValid}

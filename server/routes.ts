@@ -153,8 +153,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         processingStatus: "pending",
       });
       
-      // Start real video processing
-      processVideoAsync(clip.id, video.youtubeId, clipData.startTime, clipData.endTime, clipData.quality || "720p", clipData.format || "mp4", fileName);
+      // Start real video processing with editing options
+      processVideoAsync(
+        clip.id, 
+        video.youtubeId, 
+        clipData.startTime, 
+        clipData.endTime, 
+        clipData.quality || "720p", 
+        clipData.format || "mp4", 
+        fileName,
+        {
+          zoomLevel: clipData.zoomLevel,
+          cropX: clipData.cropX,
+          cropY: clipData.cropY,
+          brightness: clipData.brightness,
+          contrast: clipData.contrast,
+          saturation: clipData.saturation,
+          hasRandomFootage: clipData.hasRandomFootage,
+        }
+      );
       
       res.json(clip);
       
