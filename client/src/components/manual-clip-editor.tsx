@@ -37,6 +37,15 @@ export default function ManualClipEditor({ video, suggestion, onGenerateClip }: 
   const [quality, setQuality] = useState("720p");
   const [format, setFormat] = useState("mp4");
   const [title, setTitle] = useState("");
+  const [videoEdits, setVideoEdits] = useState<VideoEdits>({
+    zoomLevel: 1.0,
+    cropX: 0,
+    cropY: 0,
+    brightness: 0,
+    contrast: 1.0,
+    saturation: 1.0,
+    hasRandomFootage: false,
+  });
 
   // Update fields when suggestion changes
   useEffect(() => {
@@ -86,7 +95,12 @@ export default function ManualClipEditor({ video, suggestion, onGenerateClip }: 
       quality,
       format,
       isAiGenerated: !!suggestion,
+      ...videoEdits,
     });
+  };
+
+  const handleApplyEdits = (edits: VideoEdits) => {
+    setVideoEdits(edits);
   };
 
   const isValid = clipDuration > 0 && endTime <= video.duration && startTime < endTime;
@@ -243,6 +257,10 @@ export default function ManualClipEditor({ video, suggestion, onGenerateClip }: 
               </div>
             </div>
           </div>
+        </div>
+        
+        <div className="mt-6">
+          <VideoEditor onApplyEdits={handleApplyEdits} initialEdits={videoEdits} />
         </div>
       </div>
     </section>

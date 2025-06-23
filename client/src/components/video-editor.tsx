@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { ZoomIn, ZoomOut, Brightness6, Contrast, Palette, Video } from "lucide-react";
+import { ZoomIn, ZoomOut, Sun, Contrast, Palette, Video } from "lucide-react";
 
 interface VideoEditorProps {
   onApplyEdits: (edits: VideoEdits) => void;
@@ -124,7 +124,7 @@ export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorP
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
-                  <Brightness6 className="h-4 w-4" />
+                  <Sun className="h-4 w-4" />
                   Brightness: {edits.brightness > 0 ? '+' : ''}{edits.brightness.toFixed(1)}
                 </Label>
                 <Slider

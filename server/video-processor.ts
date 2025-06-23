@@ -128,14 +128,52 @@ function downloadVideo(videoUrl: string, outputPath: string, quality: string): P
   });
 }
 
-function createClip(inputPath: string, outputPath: string, startTime: number, endTime: number, format: string): Promise<void> {
+function createClip(inputPath: string, outputPath: string, startTime: number, endTime: number, format: string, options?: {
+  zoomLevel?: number;
+  cropX?: number;
+  cropY?: number;
+  brightness?: number;
+  contrast?: number;
+  saturation?: number;
+}): Promise<void> {
   return new Promise((resolve, reject) => {
     const duration = endTime - startTime;
+    
+    // Build video filters array
+    const videoFilters: string[] = [];
+    
+    // Apply zoom and crop
+    if (options?.zoomLevel && options.zoomLevel !== 1.0) {
+      const zoom = options.zoomLevel;
+      const cropX = options.cropX || 0;
+      const cropY = options.cropY || 0;
+      videoFilters.push(`scale=iw*${zoom}:ih*${zoom},crop=iw/${zoom}:ih/${zoom}:${cropX}:${cropY}`);
+    }
+    
+    // Apply color corrections
+    const colorFilters = [];
+    if (options?.brightness && options.brightness !== 0) {
+      colorFilters.push(`brightness=${options.brightness}`);
+    }
+    if (options?.contrast && options.contrast !== 1.0) {
+      colorFilters.push(`contrast=${options.contrast}`);
+    }
+    if (options?.saturation && options.saturation !== 1.0) {
+      colorFilters.push(`saturation=${options.saturation}`);
+    }
+    if (colorFilters.length > 0) {
+      videoFilters.push(`eq=${colorFilters.join(':')}`);
+    }
     
     let command = ffmpeg(inputPath)
       .seekInput(startTime)
       .duration(duration)
       .output(outputPath);
+    
+    // Apply video filters if any
+    if (videoFilters.length > 0) {
+      command = command.videoFilters(videoFilters);
+    }
     
     // Set format-specific options with proper audio handling
     if (format === 'gif') {

@@ -29,6 +29,14 @@ export const clips = pgTable("clips", {
   downloadUrl: text("download_url"),
   isAiGenerated: boolean("is_ai_generated").default(false),
   processingStatus: text("processing_status").default("pending"), // pending, processing, completed, failed
+  // Video editing features
+  zoomLevel: real("zoom_level").default(1.0),
+  cropX: integer("crop_x").default(0),
+  cropY: integer("crop_y").default(0),
+  brightness: real("brightness").default(0),
+  contrast: real("contrast").default(1.0),
+  saturation: real("saturation").default(1.0),
+  hasRandomFootage: boolean("has_random_footage").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -61,6 +69,13 @@ export const insertClipSchema = createInsertSchema(clips).omit({
   downloadUrl: z.string().optional(),
   isAiGenerated: z.boolean().optional(),
   processingStatus: z.string().optional(),
+  zoomLevel: z.number().optional(),
+  cropX: z.number().optional(),
+  cropY: z.number().optional(),
+  brightness: z.number().optional(),
+  contrast: z.number().optional(),
+  saturation: z.number().optional(),
+  hasRandomFootage: z.boolean().optional(),
 });
 
 export const insertAiSuggestionSchema = createInsertSchema(aiSuggestions).omit({
