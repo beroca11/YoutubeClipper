@@ -2,8 +2,9 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertVideoSchema, insertClipSchema } from "@shared/schema";
-// Using demo mode for reliable testing
 import { z } from "zod";
+import { processVideoClip, getVideoInfo, getClipFilePath } from "./video-processor";
+import fs from 'fs';
 
 function extractYouTubeId(url: string): string | null {
   const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/;
@@ -71,34 +72,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let video = await storage.getVideoByYoutubeId(youtubeId);
       
       if (!video) {
-        // Demo mode with realistic video data
+        // Fetch real video metadata from YouTube
         try {
-          // Generate realistic demo data based on YouTube ID
-          const durationSeconds = 300 + Math.floor(Math.random() * 1200); // 5-25 minutes
-          const videoTitles = [
-            "Amazing AI Technology Breakthrough",
-            "Top 10 Programming Tips for Beginners",
-            "Beautiful Nature Documentary",
-            "Coding Tutorial: Building Modern Apps",
-            "Music Video - Latest Hit Song"
-          ];
-          const channels = [
-            "TechChannel", "EduContent", "NatureWorld", "CodeMaster", "MusicVibe"
-          ];
+          const videoInfo = await getVideoInfo(url);
           
-          const randomIndex = Math.abs(youtubeId.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % videoTitles.length;
-          
-          const videoData = insertVideoSchema.parse({
-            youtubeId,
-            title: videoTitles[randomIndex],
-            description: "This is a demo video showcasing the AI Video Clipper functionality. The app can analyze YouTube videos and suggest optimal clip segments.",
-            duration: durationSeconds,
-            thumbnailUrl: `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`,
-            channelName: channels[randomIndex],
-            viewCount: `${Math.floor(Math.random() * 500000 + 10000).toLocaleString()} views`,
-            publishDate: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toLocaleDateString(),
-          });
-          
+          const videoData = insertVideoSchema.parse(videoInfo);
           video = await storage.createVideo(videoData);
           
           // Generate AI suggestions
@@ -111,8 +89,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.createAiSuggestions(suggestionsToCreate);
           
         } catch (error) {
-          console.error("Error creating video data:", error);
-          return res.status(400).json({ message: "Unable to process video information" });
+          console.error("Error fetching video info:", error);
+          return res.status(400).json({ message: "Unable to fetch video information. Please ensure the URL is valid and the video is publicly accessible." });
         }
       }
       
@@ -168,20 +146,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         processingStatus: "pending",
       });
       
-      // Start processing (simulate async processing)
-      setTimeout(async () => {
-        try {
-          // In a real implementation, this would use ffmpeg to clip the video
-          // For now, we'll simulate the processing and create a mock download URL
-          const downloadUrl = `/api/clips/${clip.id}/download`;
-          const estimatedFileSize = Math.floor(duration * 1024 * 1024 * 0.1); // Rough estimate
-          
-          await storage.updateClipStatus(clip.id, "completed", downloadUrl, estimatedFileSize);
-        } catch (error) {
-          console.error("Error processing clip:", error);
-          await storage.updateClipStatus(clip.id, "failed");
-        }
-      }, 3000); // Simulate 3 second processing time
+      // Start real video processing
+      processVideoAsync(clip.id, video.youtubeId, clipData.startTime, clipData.endTime, clipData.quality || "720p", clipData.format || "mp4", fileName);
       
       res.json(clip);
       
@@ -223,11 +189,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Clip not ready for download" });
       }
       
-      // In a real implementation, this would serve the actual video file
-      // For now, we'll return a mock response
-      res.setHeader("Content-Type", "application/octet-stream");
+      // Serve the actual video file
+      const filePath = getClipFilePath(clip.fileName!);
+      
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ message: "Video file not found" });
+      }
+      
+      const stats = fs.statSync(filePath);
+      const mimeType = clip.format === 'gif' ? 'image/gif' : 
+                      clip.format === 'webm' ? 'video/webm' : 'video/mp4';
+      
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Content-Length", stats.size);
       res.setHeader("Content-Disposition", `attachment; filename="${clip.fileName}"`);
-      res.send(Buffer.from("Mock video file content"));
+      
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
       
     } catch (error) {
       console.error("Error downloading clip:", error);
@@ -236,5 +214,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  // Helper function for async video processing
+  async function processVideoAsync(
+    clipId: number,
+    youtubeId: string, 
+    startTime: number, 
+    endTime: number, 
+    quality: string, 
+    format: string, 
+    fileName: string
+  ) {
+    try {
+      // Update status to processing
+      await storage.updateClipStatus(clipId, "processing");
+      
+      // Process the video clip
+      const result = await processVideoClip({
+        youtubeId,
+        startTime,
+        endTime,
+        quality,
+        format,
+        outputFileName: fileName
+      });
+      
+      // Update status to completed
+      const downloadUrl = `/api/clips/${clipId}/download`;
+      await storage.updateClipStatus(clipId, "completed", downloadUrl, result.fileSize);
+      
+    } catch (error) {
+      console.error("Error processing video clip:", error);
+      await storage.updateClipStatus(clipId, "failed");
+    }
+  }
+
   return httpServer;
 }
