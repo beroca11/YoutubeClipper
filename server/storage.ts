@@ -47,9 +47,14 @@ export class MemStorage implements IStorage {
   async createVideo(insertVideo: InsertVideo): Promise<Video> {
     const id = this.currentVideoId++;
     const video: Video = { 
-      ...insertVideo, 
+      ...insertVideo,
       id, 
-      createdAt: new Date() 
+      createdAt: new Date(),
+      description: insertVideo.description ?? null,
+      thumbnailUrl: insertVideo.thumbnailUrl ?? null,
+      channelName: insertVideo.channelName ?? null,
+      viewCount: insertVideo.viewCount ?? null,
+      publishDate: insertVideo.publishDate ?? null
     };
     this.videos.set(id, video);
     return video;
@@ -70,7 +75,14 @@ export class MemStorage implements IStorage {
     const clip: Clip = { 
       ...insertClip, 
       id, 
-      createdAt: new Date() 
+      createdAt: new Date(),
+      quality: insertClip.quality ?? "720p",
+      format: insertClip.format ?? "mp4",
+      fileSize: insertClip.fileSize ?? null,
+      fileName: insertClip.fileName ?? null,
+      downloadUrl: insertClip.downloadUrl ?? null,
+      isAiGenerated: insertClip.isAiGenerated ?? false,
+      processingStatus: insertClip.processingStatus ?? "pending"
     };
     this.clips.set(id, clip);
     return clip;
@@ -105,7 +117,9 @@ export class MemStorage implements IStorage {
       const suggestion: AiSuggestion = { 
         ...insertSuggestion, 
         id, 
-        createdAt: new Date() 
+        createdAt: new Date(),
+        description: insertSuggestion.description ?? null,
+        confidence: insertSuggestion.confidence ?? 0.8
       };
       this.aiSuggestions.set(id, suggestion);
       suggestions.push(suggestion);
