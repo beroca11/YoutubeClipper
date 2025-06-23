@@ -114,8 +114,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create clip
   app.post("/api/clips", async (req, res) => {
     try {
-      console.log("Creating clip for video ID:", clipData.videoId);
-      
       // Calculate duration from start and end times
       const duration = req.body.endTime - req.body.startTime;
       const clipDataWithDuration = { ...req.body, duration };
