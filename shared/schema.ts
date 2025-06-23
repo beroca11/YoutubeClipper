@@ -53,7 +53,6 @@ export const insertVideoSchema = createInsertSchema(videos).omit({
 export const insertClipSchema = createInsertSchema(clips).omit({
   id: true,
   createdAt: true,
-  duration: true, // We'll calculate this on the server
 }).extend({
   quality: z.string().optional(),
   format: z.string().optional(),

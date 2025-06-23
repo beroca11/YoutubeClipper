@@ -136,8 +136,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create clip
   app.post("/api/clips", async (req, res) => {
     try {
-      console.log("Received clip data:", JSON.stringify(req.body, null, 2));
-      const clipData = insertClipSchema.parse(req.body);
+      // Remove debug logging
+      
+      // Calculate duration from start and end times
+      const duration = req.body.endTime - req.body.startTime;
+      const clipDataWithDuration = { ...req.body, duration };
+      
+      const clipData = insertClipSchema.parse(clipDataWithDuration);
       
       // Validate the video exists
       const video = await storage.getVideo(clipData.videoId);
@@ -154,13 +159,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "End time exceeds video duration" });
       }
       
-      // Calculate duration and generate filename
-      const duration = clipData.endTime - clipData.startTime;
-      const fileName = `${video.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50)}_${Date.now()}.${clipData.format}`;
+      // Generate filename
+      const fileName = `${video.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50)}_${Date.now()}.${clipData.format || 'mp4'}`;
       
       const clip = await storage.createClip({
         ...clipData,
-        duration,
         fileName,
         processingStatus: "pending",
       });
