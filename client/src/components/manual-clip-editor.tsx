@@ -8,6 +8,7 @@ import { VideoData, AiSuggestion } from "@/lib/types";
 
 import VideoEditor, { VideoEdits } from "./video-editor";
 import PreviewModal from "./preview-modal";
+import EffectsPreview from "./effects-preview";
 
 interface ManualClipEditorProps {
   video: VideoData;
@@ -259,8 +260,12 @@ export default function ManualClipEditor({ video, suggestion, onGenerateClip }: 
           </div>
         </div>
         
-        <div className="mt-6">
+        <div className="mt-6 space-y-4">
           <VideoEditor onApplyEdits={handleApplyEdits} initialEdits={videoEdits} />
+          
+          <div className="bg-gray-50 rounded-lg p-4">
+            <EffectsPreview edits={videoEdits} />
+          </div>
         </div>
       </div>
     </section>

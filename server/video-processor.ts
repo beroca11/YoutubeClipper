@@ -62,6 +62,15 @@ export async function processVideoClip(options: ClipOptions): Promise<{
         ? path.join(path.dirname(outputPath), `temp_clip_${Date.now()}.mp4`)
         : outputPath;
       
+      console.log('Creating clip with effects:', {
+        zoomLevel: options.zoomLevel,
+        cropX: options.cropX,
+        cropY: options.cropY,
+        brightness: options.brightness,
+        contrast: options.contrast,
+        saturation: options.saturation,
+      });
+      
       await createClip(tempVideoPath, tempClipPath, startTime, endTime, format, {
         zoomLevel: options.zoomLevel,
         cropX: options.cropX,

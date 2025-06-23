@@ -207,7 +207,20 @@ export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorP
           <Button variant="outline" onClick={resetEdits}>
             Reset All
           </Button>
-          <Button onClick={() => onApplyEdits(edits)} className="bg-red-600 hover:bg-red-700">
+          <Button 
+            onClick={() => {
+              onApplyEdits(edits);
+              // Show confirmation
+              const effectsCount = Object.values(edits).filter((v, i) => 
+                i === 6 ? v : (i === 0 ? v !== 1.0 : (i === 1 || i === 2 ? v !== 0 : v !== 1.0))
+              ).length;
+              
+              if (effectsCount > 0) {
+                alert(`✓ ${effectsCount} video effects applied successfully!\n\nEffects will be visible in the downloaded clip.`);
+              }
+            }} 
+            className="bg-red-600 hover:bg-red-700"
+          >
             Apply Edits
           </Button>
         </div>
