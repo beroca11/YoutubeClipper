@@ -90,11 +90,9 @@ export async function processVideoClip(options: ClipOptions): Promise<{
 function downloadVideo(videoUrl: string, outputPath: string, quality: string): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
-      // Get video quality format
-      const qualityFilter = getQualityFilter(quality);
-      
+      // Download both video and audio streams
       const stream = ytdl(videoUrl, { 
-        filter: qualityFilter,
+        filter: 'audioandvideo',
         quality: 'highest'
       });
       
@@ -132,22 +130,28 @@ function createClip(inputPath: string, outputPath: string, startTime: number, en
       .duration(duration)
       .output(outputPath);
     
-    // Set format-specific options
+    // Set format-specific options with proper audio handling
     if (format === 'gif') {
       command = command
         .fps(15)
         .size('640x360')
+        .noAudio()
         .format('gif');
     } else if (format === 'webm') {
       command = command
         .videoCodec('libvpx')
         .audioCodec('libvorbis')
+        .audioBitrate('128k')
+        .videoQuality(23)
         .format('webm');
     } else {
-      // MP4 default
+      // MP4 default with better audio settings
       command = command
         .videoCodec('libx264')
         .audioCodec('aac')
+        .audioBitrate('128k')
+        .audioFrequency(44100)
+        .audioChannels(2)
         .format('mp4');
     }
     
@@ -271,11 +275,15 @@ async function createDemoVideoClip(outputPath: string, startTime: number, endTim
         .audioCodec('libvorbis')
         .format('webm');
     } else {
-      // MP4 default
+      // MP4 default with audio generation for demo
       command = command
-        .complexFilter(textFilter)
+        .complexFilter([
+          textFilter,
+          'anullsrc=channel_layout=stereo:sample_rate=44100'
+        ])
         .videoCodec('libx264')
         .audioCodec('aac')
+        .audioBitrate('128k')
         .format('mp4');
     }
     
