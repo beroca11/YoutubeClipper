@@ -4,7 +4,18 @@ import { storage } from "./storage";
 import { insertVideoSchema, insertClipSchema } from "@shared/schema";
 import { z } from "zod";
 import { processVideoClip, getVideoInfo, getClipFilePath } from "./video-processor";
+import { AIAgent, type ViralAnalysis, type ContentExplanation, type SocialMediaOptimization } from "./ai-agent";
 import fs from 'fs';
+import express from 'express';
+import { videos, clips } from '../shared/schema';
+import { eq } from 'drizzle-orm';
+import { VideoProcessor } from './video-processor';
+import path from 'path';
+import ytdl from '@distube/ytdl-core';
+
+const router = express.Router();
+const videoProcessor = new VideoProcessor();
+const aiAgent = AIAgent.getInstance();
 
 function extractYouTubeId(url: string): string | null {
   const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/;
@@ -111,7 +122,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Create clip
+  // AI Viral Analysis
+  app.post("/api/ai/analyze-virality", async (req, res) => {
+    try {
+      const { videoId } = req.body;
+      
+      const video = await storage.getVideo(videoId);
+      if (!video) {
+        return res.status(404).json({ error: "Video not found" });
+      }
+      
+      const analysis = await aiAgent.analyzeVideoForVirality(video);
+      res.json(analysis);
+      
+    } catch (error) {
+      console.error("Error analyzing virality:", error);
+      res.status(500).json({ error: "Failed to analyze virality" });
+    }
+  });
+
+  // AI Content Explanation
+  app.post("/api/ai/generate-explanation", async (req, res) => {
+    try {
+      const { videoId } = req.body;
+      
+      const video = await storage.getVideo(videoId);
+      if (!video) {
+        return res.status(404).json({ error: "Video not found" });
+      }
+      
+      const explanation = await aiAgent.generateContentExplanation(video);
+      res.json(explanation);
+      
+    } catch (error) {
+      console.error("Error generating explanation:", error);
+      res.status(500).json({ error: "Failed to generate explanation" });
+    }
+  });
+
+  // AI Social Media Optimization
+  app.post("/api/ai/optimize-social-media", async (req, res) => {
+    try {
+      const { videoId, platform } = req.body;
+      
+      const video = await storage.getVideo(videoId);
+      if (!video) {
+        return res.status(404).json({ error: "Video not found" });
+      }
+      
+      const optimization = await aiAgent.optimizeForSocialMedia(video, platform);
+      res.json(optimization);
+      
+    } catch (error) {
+      console.error("Error optimizing for social media:", error);
+      res.status(500).json({ error: "Failed to optimize for social media" });
+    }
+  });
+  
+  // Enhanced clip creation with TikTok optimization
   app.post("/api/clips", async (req, res) => {
     try {
       // Calculate duration from start and end times
@@ -128,13 +196,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         saturation: clipData.saturation,
         hasRandomFootage: clipData.hasRandomFootage
       });
-      
+
       // Validate the video exists
       const video = await storage.getVideo(clipData.videoId);
       if (!video) {
         return res.status(404).json({ message: "Video not found" });
       }
-      
+
       // Validate clip timing
       if (clipData.startTime >= clipData.endTime) {
         return res.status(400).json({ message: "Start time must be before end time" });
@@ -152,14 +220,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileName,
         processingStatus: "pending",
       });
-      
-      // Start real video processing with editing options
+
+      // Start enhanced video processing with TikTok optimization
       processVideoAsync(
         clip.id, 
         video.youtubeId, 
         clipData.startTime, 
         clipData.endTime, 
-        clipData.quality || "720p", 
+        clipData.quality || "1080p", 
         clipData.format || "mp4", 
         fileName,
         {
@@ -170,9 +238,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           contrast: clipData.contrast,
           saturation: clipData.saturation,
           hasRandomFootage: clipData.hasRandomFootage,
+          aspectRatio: "9:16", // Default to vertical format
+          resolution: "1080x1920", // Default to vertical resolution
+          orientation: "portrait", // Default to portrait orientation
+          customSubtitles: req.body.customSubtitles,
+          visualEffects: req.body.visualEffects,
+          transitions: req.body.transitions
         }
       );
-      
+
       res.json(clip);
       
     } catch (error) {
@@ -184,7 +258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Internal server error" });
     }
   });
-  
+
   // Get clip status
   app.get("/api/clips/:id", async (req, res) => {
     try {
@@ -216,7 +290,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Serve the actual video file
       const filePath = getClipFilePath(clip.fileName!);
       
+      console.log('Download request:', {
+        clipId,
+        fileName: clip.fileName,
+        filePath,
+        exists: fs.existsSync(filePath)
+      });
+      
       if (!fs.existsSync(filePath)) {
+        console.error('File not found:', filePath);
         return res.status(404).json({ message: "Video file not found" });
       }
       
@@ -255,20 +337,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       contrast?: number;
       saturation?: number;
       hasRandomFootage?: boolean;
+      aspectRatio?: string;
+      resolution?: string;
+      orientation?: string;
+      customSubtitles?: string[];
+      visualEffects?: any;
+      transitions?: any;
     }
   ) {
     try {
       // Update status to processing
       await storage.updateClipStatus(clipId, "processing");
       
-      // Process the video clip
+      console.log('Using standard video processing');
+      
+      // Use the original processVideoClip for all processing
       const result = await processVideoClip({
         youtubeId,
         startTime,
         endTime,
         quality,
         format,
-        outputFileName: fileName
+        outputFileName: fileName,
+        zoomLevel: editOptions?.zoomLevel,
+        cropX: editOptions?.cropX,
+        cropY: editOptions?.cropY,
+        brightness: editOptions?.brightness,
+        contrast: editOptions?.contrast,
+        saturation: editOptions?.saturation,
+        hasRandomFootage: editOptions?.hasRandomFootage,
+        aspectRatio: editOptions?.aspectRatio,
+        resolution: editOptions?.resolution,
+        orientation: editOptions?.orientation
       });
       
       // Update status to completed

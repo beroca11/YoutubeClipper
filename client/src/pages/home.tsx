@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from 'react';
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +12,7 @@ import ManualClipEditor from "@/components/manual-clip-editor";
 import ProcessingStatus from "@/components/processing-status";
 import DownloadSection from "@/components/download-section";
 import FeaturesSection from "@/components/features-section";
+import AIViralAnalysis from "@/components/ai-viral-analysis";
 
 type AppStep = 'input' | 'analysis' | 'processing' | 'completed';
 
@@ -22,6 +23,7 @@ export default function Home() {
   const [selectedSuggestion, setSelectedSuggestion] = useState<AiSuggestion | null>(null);
   const [processingClipId, setProcessingClipId] = useState<number | null>(null);
   const [completedClip, setCompletedClip] = useState<ClipData | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const { toast } = useToast();
 
@@ -80,8 +82,8 @@ export default function Home() {
   });
 
   // Check if clip is completed
-  if (clipStatus && clipStatus.processingStatus === 'completed' && currentStep === 'processing') {
-    setCompletedClip(clipStatus);
+  if (clipStatus && (clipStatus as ClipData).processingStatus === 'completed' && currentStep === 'processing') {
+    setCompletedClip(clipStatus as ClipData);
     setCurrentStep('completed');
     setProcessingClipId(null);
     queryClient.invalidateQueries({ queryKey: [`/api/clips/${processingClipId}`] });
@@ -117,10 +119,10 @@ export default function Home() {
   };
 
   // Calculate processing progress (mock)
-  const processingProgress = clipStatus ? 
-    clipStatus.processingStatus === 'pending' ? 20 :
-    clipStatus.processingStatus === 'processing' ? 70 :
-    clipStatus.processingStatus === 'completed' ? 100 : 0
+  const processingProgress = clipStatus && typeof clipStatus === 'object' && 'processingStatus' in clipStatus ? 
+    (clipStatus as ClipData).processingStatus === 'pending' ? 20 :
+    (clipStatus as ClipData).processingStatus === 'processing' ? 70 :
+    (clipStatus as ClipData).processingStatus === 'completed' ? 100 : 0
     : 20;
 
   return (
@@ -135,6 +137,10 @@ export default function Home() {
 
         {currentStep !== 'input' && videoData && (
           <VideoAnalysis video={videoData} />
+        )}
+
+        {currentStep !== 'input' && videoData && (
+          <AIViralAnalysis video={videoData} />
         )}
 
         {currentStep === 'analysis' && suggestions.length > 0 && (

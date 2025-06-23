@@ -4,10 +4,13 @@ import ytdl from '@distube/ytdl-core';
 import ffmpeg from 'fluent-ffmpeg';
 import { promisify } from 'util';
 import { addRandomFootageToClip } from './random-footage';
+import { Clip } from '../shared/schema';
 
 const mkdir = promisify(fs.mkdir);
 const unlink = promisify(fs.unlink);
 const exists = promisify(fs.exists);
+const writeFile = promisify(fs.writeFile);
+const readFile = promisify(fs.readFile);
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
@@ -41,6 +44,37 @@ interface ClipOptions {
   contrast?: number;
   saturation?: number;
   hasRandomFootage?: boolean;
+  aspectRatio?: string;
+  resolution?: string;
+  orientation?: string;
+}
+
+interface VideoEditOptions {
+  zoomLevel?: number;
+  cropX?: number;
+  cropY?: number;
+  brightness?: number;
+  contrast?: number;
+  saturation?: number;
+  hasRandomFootage?: boolean;
+}
+
+interface AdvancedVideoEditOptions extends VideoEditOptions {
+  customSubtitles?: string[];
+  backgroundMusic?: string;
+  visualEffects?: {
+    blur?: number;
+    brightness?: number;
+    contrast?: number;
+    saturation?: number;
+    hue?: number;
+    gamma?: number;
+    speed?: number;
+  };
+  transitions?: {
+    type: 'fade' | 'slide' | 'zoom' | 'dissolve';
+    duration: number;
+  };
 }
 
 export async function processVideoClip(options: ClipOptions): Promise<{
@@ -52,6 +86,13 @@ export async function processVideoClip(options: ClipOptions): Promise<{
   const { youtubeId, startTime, endTime, quality, format, outputFileName } = options;
   const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
   const outputPath = path.join(CLIPS_DIR, outputFileName);
+  
+  console.log('processVideoClip called with:', {
+    youtubeId,
+    outputFileName,
+    outputPath,
+    CLIPS_DIR
+  });
   
   try {
     // Check if we have a cached version of this video
@@ -98,6 +139,9 @@ export async function processVideoClip(options: ClipOptions): Promise<{
       brightness: options.brightness,
       contrast: options.contrast,
       saturation: options.saturation,
+      aspectRatio: options.aspectRatio,
+      resolution: options.resolution,
+      orientation: options.orientation,
     });
     
     // Add random footage if requested
@@ -167,12 +211,25 @@ function createClip(inputPath: string, outputPath: string, startTime: number, en
   brightness?: number;
   contrast?: number;
   saturation?: number;
+  aspectRatio?: string;
+  resolution?: string;
+  orientation?: string;
 }): Promise<void> {
   return new Promise((resolve, reject) => {
     const duration = endTime - startTime;
     
     // Build video filters array
     const videoFilters: string[] = [];
+    
+    // Handle vertical format (9:16 aspect ratio)
+    const isVertical = options?.aspectRatio === '9:16' || options?.orientation === 'portrait';
+    const targetResolution = options?.resolution || (isVertical ? '1080x1920' : '1920x1080');
+    
+    if (isVertical) {
+      // For vertical format, we need to crop and resize to 9:16
+      videoFilters.push(`crop=ih*9/16:ih:iw/2-ih*9/32:0`); // Crop to 9:16 from center
+      videoFilters.push(`scale=${targetResolution}`); // Scale to target resolution
+    }
     
     // Apply zoom and crop
     if (options?.zoomLevel && options.zoomLevel !== 1.0) {
@@ -217,9 +274,10 @@ function createClip(inputPath: string, outputPath: string, startTime: number, en
     
     // Set format-specific options with proper audio handling
     if (format === 'gif') {
+      const gifSize = isVertical ? '360x640' : '640x360';
       command = command
         .fps(15)
-        .size('640x360')
+        .size(gifSize)
         .noAudio()
         .format('gif');
     } else if (format === 'webm') {
@@ -394,4 +452,247 @@ async function createDemoVideoClip(outputPath: string, startTime: number, endTim
 
 export function getClipFilePath(fileName: string): string {
   return path.join(CLIPS_DIR, fileName);
+}
+
+export class VideoProcessor {
+  private uploadsDir: string;
+  private clipsDir: string;
+
+  constructor() {
+    this.uploadsDir = path.join(process.cwd(), 'uploads');
+    this.clipsDir = CLIPS_DIR;
+    this.ensureDirectories();
+  }
+
+  private ensureDirectories() {
+    if (!fs.existsSync(this.uploadsDir)) {
+      fs.mkdirSync(this.uploadsDir, { recursive: true });
+    }
+    if (!fs.existsSync(this.clipsDir)) {
+      fs.mkdirSync(this.clipsDir, { recursive: true });
+    }
+  }
+
+  async processVideoClip(
+    clip: Clip,
+    videoPath: string,
+    options: AdvancedVideoEditOptions = {}
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const outputPath = path.join(this.clipsDir, `clip_${clip.videoId}_${Date.now()}.mp4`);
+      
+      console.log('Creating clip with advanced effects:', {
+        ...options,
+      });
+
+      let command = ffmpeg(videoPath)
+        .inputOptions([
+          '-ss', clip.startTime.toString(),
+          '-t', (clip.endTime - clip.startTime).toString()
+        ])
+        .outputOptions([
+          '-c:v', 'libx264',
+          '-preset', 'fast',
+          '-crf', '23',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-movflags', '+faststart',
+          '-pix_fmt', 'yuv420p'
+        ]);
+
+      // Build a comprehensive video filter chain
+      let videoFilters: string[] = [];
+      let audioFilters: string[] = [];
+
+      // Apply basic video edits first
+      if (options.zoomLevel !== undefined) {
+        const scale = 1 + options.zoomLevel;
+        videoFilters.push(`scale=iw*${scale}:ih*${scale}`);
+      }
+
+      if (options.cropX !== undefined && options.cropY !== undefined) {
+        videoFilters.push(`crop=iw-${options.cropX}:ih-${options.cropY}:${options.cropX/2}:${options.cropY/2}`);
+      }
+
+      // Apply color corrections using eq filter
+      const colorAdjustments = [];
+      if (options?.brightness && options.brightness !== 0) {
+        colorAdjustments.push(`brightness=${options.brightness}`);
+      }
+      if (options?.contrast && options.contrast !== 1.0) {
+        colorAdjustments.push(`contrast=${options.contrast}`);
+      }
+      if (options?.saturation && options.saturation !== 1.0) {
+        colorAdjustments.push(`saturation=${options.saturation}`);
+      }
+      
+      if (colorAdjustments.length > 0) {
+        videoFilters.push(`eq=${colorAdjustments.join(':')}`);
+      }
+
+      // Apply advanced visual effects
+      if (options.visualEffects) {
+        const effects = options.visualEffects;
+        
+        // Only apply if not already applied as basic edits
+        if (effects.brightness !== undefined && options.brightness === undefined) {
+          videoFilters.push(`eq=brightness=${effects.brightness}`);
+        }
+        if (effects.contrast !== undefined && options.contrast === undefined) {
+          videoFilters.push(`eq=contrast=${effects.contrast}`);
+        }
+        if (effects.saturation !== undefined && options.saturation === undefined) {
+          videoFilters.push(`eq=saturation=${effects.saturation}`);
+        }
+        if (effects.hue !== undefined) {
+          videoFilters.push(`hue=h=${effects.hue}`);
+        }
+        if (effects.gamma !== undefined) {
+          videoFilters.push(`eq=gamma=${effects.gamma}`);
+        }
+        if (effects.blur !== undefined) {
+          videoFilters.push(`boxblur=${effects.blur}:${effects.blur}`);
+        }
+      }
+
+      // Apply speed changes
+      if (options.visualEffects?.speed !== undefined) {
+        const speed = options.visualEffects.speed;
+        videoFilters.push(`setpts=${1/speed}*PTS`);
+        if (speed !== 1) {
+          audioFilters.push(`atempo=${speed}`);
+        }
+      }
+
+      // Add custom subtitles
+      if (options.customSubtitles && options.customSubtitles.length > 0) {
+        const duration = clip.endTime - clip.startTime;
+        const timePerSubtitle = duration / options.customSubtitles.length;
+        
+        options.customSubtitles.forEach((subtitle, index) => {
+          const startTime = index * timePerSubtitle;
+          const endTime = (index + 1) * timePerSubtitle;
+          
+          videoFilters.push(
+            `drawtext=text='${subtitle}':fontsize=60:fontcolor=white:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=h-text_h-50:enable='between(t,${startTime},${endTime})'`
+          );
+        });
+      }
+
+      // Add transitions
+      if (options.transitions) {
+        const duration = options.transitions.duration;
+        switch (options.transitions.type) {
+          case 'fade':
+            videoFilters.push(`fade=t=in:st=0:d=${duration},fade=t=out:st=${duration}:d=${duration}`);
+            break;
+          case 'slide':
+            videoFilters.push(`slide=slide=left:duration=${duration}`);
+            break;
+          case 'zoom':
+            videoFilters.push(`zoompan=z='min(zoom+0.0015,1.5)':d=125:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920`);
+            break;
+          case 'dissolve':
+            videoFilters.push(`fade=t=in:st=0:d=${duration}`);
+            break;
+        }
+      }
+
+      // Apply all video filters in a single chain
+      if (videoFilters.length > 0) {
+        console.log('Applying video filters:', videoFilters.join(','));
+        command = command.videoFilters(videoFilters.join(','));
+      }
+
+      // Apply audio filters
+      if (audioFilters.length > 0) {
+        console.log('Applying audio filters:', audioFilters.join(','));
+        command = command.audioFilters(audioFilters.join(','));
+      }
+
+      // Add background music if specified
+      if (options.backgroundMusic) {
+        command = command
+          .input(options.backgroundMusic)
+          .complexFilter([
+            '[0:a][1:a]amix=inputs=2:duration=first:weights=0.7,0.3[a]'
+          ])
+          .outputOptions(['-map', '0:v', '-map', '[a]']);
+      }
+
+      command
+        .output(outputPath)
+        .on('start', (commandLine) => {
+          console.log('FFmpeg command:', commandLine);
+        })
+        .on('progress', (progress) => {
+          console.log(`Processing: ${progress.percent}% done`);
+        })
+        .on('end', () => {
+          console.log('Video processing completed successfully');
+          resolve(outputPath);
+        })
+        .on('error', (err) => {
+          console.error('FFmpeg error:', err);
+          reject(err);
+        })
+        .run();
+    });
+  }
+
+  async generateRandomFootage(): Promise<string> {
+    // Create a simple animated background for random footage
+    const outputPath = path.join(this.uploadsDir, 'random_footage.mp4');
+    
+    return new Promise((resolve, reject) => {
+      ffmpeg()
+        .input('color=size=1080x1920:duration=10:rate=30:color=random')
+        .inputOptions(['-f', 'lavfi'])
+        .videoFilters([
+          'mandelbrot=size=1080x1920:rate=30:duration=10',
+          'hue=h=90:s=1.5',
+          'eq=contrast=1.2:saturation=1.3'
+        ])
+        .outputOptions([
+          '-c:v', 'libx264',
+          '-preset', 'fast',
+          '-crf', '23',
+          '-pix_fmt', 'yuv420p'
+        ])
+        .output(outputPath)
+        .on('end', () => {
+          console.log('Random footage generated successfully');
+          resolve(outputPath);
+        })
+        .on('error', (err) => {
+          console.error('Error generating random footage:', err);
+          reject(err);
+        })
+        .run();
+    });
+  }
+
+  async createTikTokOptimizedClip(
+    clip: Clip,
+    videoPath: string,
+    options: {
+      addSubtitles?: boolean;
+      subtitleStyle?: string;
+      addEffects?: boolean;
+      addMusic?: boolean;
+      customSubtitles?: string[];
+    } = {}
+  ): Promise<string> {
+    const tiktokOptions: AdvancedVideoEditOptions = {
+      customSubtitles: options.customSubtitles,
+      visualEffects: {
+        brightness: 0.1,
+        contrast: 1.1,
+        saturation: 1.2,
+        gamma: 1.05
+      }
+    };
+
+    return this.processVideoClip(clip, videoPath, tiktokOptions);
+  }
 }
