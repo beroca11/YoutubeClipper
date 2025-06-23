@@ -246,7 +246,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     endTime: number, 
     quality: string, 
     format: string, 
-    fileName: string
+    fileName: string,
+    editOptions?: {
+      zoomLevel?: number;
+      cropX?: number;
+      cropY?: number;
+      brightness?: number;
+      contrast?: number;
+      saturation?: number;
+      hasRandomFootage?: boolean;
+    }
   ) {
     try {
       // Update status to processing

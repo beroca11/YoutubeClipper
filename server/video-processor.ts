@@ -209,7 +209,10 @@ function createClip(inputPath: string, outputPath: string, startTime: number, en
     
     // Apply video filters if any
     if (videoFilters.length > 0) {
-      command = command.videoFilters(videoFilters);
+      console.log('Applying video filters:', videoFilters.join(','));
+      command = command.videoFilters(videoFilters.join(','));
+    } else {
+      console.log('No video filters to apply');
     }
     
     // Set format-specific options with proper audio handling
