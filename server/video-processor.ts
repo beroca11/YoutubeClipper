@@ -170,22 +170,27 @@ function createClip(inputPath: string, outputPath: string, startTime: number, en
       const zoom = options.zoomLevel;
       const cropX = options.cropX || 0;
       const cropY = options.cropY || 0;
-      videoFilters.push(`scale=iw*${zoom}:ih*${zoom},crop=iw/${zoom}:ih/${zoom}:${cropX}:${cropY}`);
+      // Scale and crop filter
+      videoFilters.push(`scale=iw*${zoom}:ih*${zoom}`);
+      if (cropX !== 0 || cropY !== 0) {
+        videoFilters.push(`crop=iw:ih:${Math.abs(cropX)}:${Math.abs(cropY)}`);
+      }
     }
     
-    // Apply color corrections
-    const colorFilters = [];
+    // Apply color corrections using eq filter
+    const colorAdjustments = [];
     if (options?.brightness && options.brightness !== 0) {
-      colorFilters.push(`brightness=${options.brightness}`);
+      colorAdjustments.push(`brightness=${options.brightness}`);
     }
     if (options?.contrast && options.contrast !== 1.0) {
-      colorFilters.push(`contrast=${options.contrast}`);
+      colorAdjustments.push(`contrast=${options.contrast}`);
     }
     if (options?.saturation && options.saturation !== 1.0) {
-      colorFilters.push(`saturation=${options.saturation}`);
+      colorAdjustments.push(`saturation=${options.saturation}`);
     }
-    if (colorFilters.length > 0) {
-      videoFilters.push(`eq=${colorFilters.join(':')}`);
+    
+    if (colorAdjustments.length > 0) {
+      videoFilters.push(`eq=${colorAdjustments.join(':')}`);
     }
     
     let command = ffmpeg(inputPath)
