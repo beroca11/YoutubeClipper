@@ -3,6 +3,7 @@ import path from 'path';
 import ytdl from '@distube/ytdl-core';
 import ffmpeg from 'fluent-ffmpeg';
 import { promisify } from 'util';
+import { addRandomFootageToClip } from './random-footage';
 
 const mkdir = promisify(fs.mkdir);
 const unlink = promisify(fs.unlink);
@@ -55,7 +56,29 @@ export async function processVideoClip(options: ClipOptions): Promise<{
       await downloadVideo(videoUrl, tempVideoPath, quality);
       
       console.log('Creating video clip from downloaded video...');
-      await createClip(tempVideoPath, outputPath, startTime, endTime, format);
+      
+      // If random footage is requested, create clip in temp location first
+      const tempClipPath = options.hasRandomFootage 
+        ? path.join(path.dirname(outputPath), `temp_clip_${Date.now()}.mp4`)
+        : outputPath;
+      
+      await createClip(tempVideoPath, tempClipPath, startTime, endTime, format, {
+        zoomLevel: options.zoomLevel,
+        cropX: options.cropX,
+        cropY: options.cropY,
+        brightness: options.brightness,
+        contrast: options.contrast,
+        saturation: options.saturation,
+      });
+      
+      // Add random footage if requested
+      if (options.hasRandomFootage) {
+        console.log('Adding random footage to clip...');
+        const duration = endTime - startTime;
+        await addRandomFootageToClip(tempClipPath, outputPath, duration);
+        // Clean up temp clip
+        await unlink(tempClipPath);
+      }
       
       // Clean up temp file
       await unlink(tempVideoPath);
