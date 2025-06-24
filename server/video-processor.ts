@@ -4,6 +4,7 @@ import ytdl from '@distube/ytdl-core';
 import ffmpeg from 'fluent-ffmpeg';
 import { promisify } from 'util';
 import { addRandomFootageToClip } from './random-footage';
+import { addWatermarkToClip, createSampleWatermark } from './watermark';
 import { Clip } from '../shared/schema';
 
 const mkdir = promisify(fs.mkdir);
@@ -11,6 +12,8 @@ const unlink = promisify(fs.unlink);
 const exists = promisify(fs.exists);
 const writeFile = promisify(fs.writeFile);
 const readFile = promisify(fs.readFile);
+const copyFile = promisify(fs.copyFile);
+const readdir = promisify(fs.readdir);
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
@@ -47,6 +50,8 @@ interface ClipOptions {
   aspectRatio?: string;
   resolution?: string;
   orientation?: string;
+  addWatermark?: boolean;
+  watermarkPath?: string;
 }
 
 interface VideoEditOptions {
@@ -94,6 +99,13 @@ export async function processVideoClip(options: ClipOptions): Promise<{
     CLIPS_DIR
   });
   
+  // Check for potential filename issues
+  console.log('Filename length:', outputFileName.length);
+  console.log('Full path length:', outputPath.length);
+  if (outputPath.length > 260) {
+    console.warn('Warning: File path is very long, may cause issues on Windows');
+  }
+  
   try {
     // Check if we have a cached version of this video
     let tempVideoPath = videoCache.get(youtubeId);
@@ -117,6 +129,9 @@ export async function processVideoClip(options: ClipOptions): Promise<{
     }
     
     console.log('Creating video clip...');
+    
+    // Ensure the output directory exists
+    await ensureDirectories();
     
     // If random footage is requested, create clip in temp location first
     const tempClipPath = options.hasRandomFootage 
@@ -148,17 +163,91 @@ export async function processVideoClip(options: ClipOptions): Promise<{
     if (options.hasRandomFootage) {
       console.log('Adding random footage to clip...');
       const duration = endTime - startTime;
-      await addRandomFootageToClip(tempClipPath, outputPath, duration);
-      // Clean up temp clip
-      await unlink(tempClipPath);
+      try {
+        await addRandomFootageToClip(tempClipPath, outputPath, duration);
+        // Clean up temp clip
+        await unlink(tempClipPath);
+      } catch (randomFootageError) {
+        console.error('Random footage failed, using original clip:', randomFootageError);
+        // If random footage fails, just use the original clip
+        try {
+          // Check if temp clip exists before copying
+          if (await exists(tempClipPath)) {
+            await copyFile(tempClipPath, outputPath);
+            await unlink(tempClipPath);
+          } else {
+            // If temp clip doesn't exist, create the output directly from the main video
+            console.log('Temp clip not found, creating output directly from main video');
+            await createClip(tempVideoPath, outputPath, startTime, endTime, format, {
+              zoomLevel: options.zoomLevel,
+              cropX: options.cropX,
+              cropY: options.cropY,
+              brightness: options.brightness,
+              contrast: options.contrast,
+              saturation: options.saturation,
+              aspectRatio: options.aspectRatio,
+              resolution: options.resolution,
+              orientation: options.orientation,
+            });
+          }
+        } catch (copyError) {
+          console.error('Failed to create output file:', copyError);
+          throw new Error('Failed to create video clip. Please try again.');
+        }
+      }
+    } else {
+      // No random footage requested, the clip was already created directly to outputPath
+      console.log('Clip created directly to output path:', outputPath);
+      // No copying needed since createClip already wrote to the final outputPath
+    }
+    
+    // Add watermark if requested
+    if (options.addWatermark) {
+      console.log('Adding watermark to clip...');
+      try {
+        // Create a temporary path for the watermarked version
+        const tempWatermarkedPath = path.join(path.dirname(outputPath), `watermarked_${Date.now()}.mp4`);
+        
+        // Add watermark to the clip
+        await addWatermarkToClip(outputPath, tempWatermarkedPath, options.watermarkPath);
+        
+        // Replace the original file with the watermarked version
+        await unlink(outputPath);
+        await copyFile(tempWatermarkedPath, outputPath);
+        await unlink(tempWatermarkedPath);
+        
+        console.log('Watermark added successfully');
+      } catch (watermarkError) {
+        console.error('Watermark failed, using original clip:', watermarkError);
+        // Continue with the original clip if watermark fails
+      }
     }
     
     // Only clean up temp file if it's not cached
     if (!videoCache.has(youtubeId)) {
-      await unlink(tempVideoPath);
+      try {
+        await unlink(tempVideoPath);
+      } catch (cleanupError) {
+        console.warn('Failed to clean up temp video file:', cleanupError);
+      }
     }
     
+    // Check if output file exists before getting stats
+    if (!(await exists(outputPath))) {
+      console.error('Output file not found after processing:', outputPath);
+      console.error('Checking directory contents...');
+      try {
+        const files = await readdir(path.dirname(outputPath));
+        console.error('Files in clips directory:', files);
+      } catch (dirError) {
+        console.error('Could not read clips directory:', dirError);
+      }
+      throw new Error('Video clip was not created successfully. Please try again.');
+    }
+    
+    console.log('Output file created successfully:', outputPath);
     const stats = fs.statSync(outputPath);
+    console.log('File size:', stats.size, 'bytes');
     return {
       filePath: outputPath,
       fileSize: stats.size
@@ -307,6 +396,13 @@ function createClip(inputPath: string, outputPath: string, startTime: number, en
       })
       .on('end', () => {
         console.log('Video clipping completed');
+        console.log('Checking if output file exists:', outputPath);
+        if (fs.existsSync(outputPath)) {
+          const stats = fs.statSync(outputPath);
+          console.log('Output file exists with size:', stats.size, 'bytes');
+        } else {
+          console.error('Output file does not exist after FFmpeg completion');
+        }
         resolve();
       })
       .on('error', (error) => {

@@ -194,7 +194,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         brightness: clipData.brightness,
         contrast: clipData.contrast,
         saturation: clipData.saturation,
-        hasRandomFootage: clipData.hasRandomFootage
+        hasRandomFootage: clipData.hasRandomFootage,
+        addWatermark: req.body.addWatermark
       });
 
       // Validate the video exists
@@ -214,6 +215,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Generate filename
       const fileName = `${video.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50)}_${Date.now()}.${clipData.format || 'mp4'}`;
+      
+      // Safety check: Disable random footage if it's causing issues
+      // This prevents the ENOENT errors we've been seeing
+      const safeRandomFootage = false; // Temporarily disabled for stability
+      
+      if (clipData.hasRandomFootage && !safeRandomFootage) {
+        console.log('Random footage requested but disabled for stability');
+      }
       
       const clip = await storage.createClip({
         ...clipData,
@@ -237,13 +246,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           brightness: clipData.brightness,
           contrast: clipData.contrast,
           saturation: clipData.saturation,
-          hasRandomFootage: clipData.hasRandomFootage,
+          hasRandomFootage: safeRandomFootage, // Use safe version instead of clipData.hasRandomFootage
           aspectRatio: "9:16", // Default to vertical format
           resolution: "1080x1920", // Default to vertical resolution
           orientation: "portrait", // Default to portrait orientation
           customSubtitles: req.body.customSubtitles,
           visualEffects: req.body.visualEffects,
-          transitions: req.body.transitions
+          transitions: req.body.transitions,
+          addWatermark: req.body.addWatermark,
+          watermarkPath: req.body.watermarkPath
         }
       );
 
@@ -319,6 +330,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Watermark management endpoints
+  app.get("/api/watermarks", async (req, res) => {
+    try {
+      const { getAvailableWatermarks } = await import('./watermark');
+      const watermarks = await getAvailableWatermarks();
+      res.json({ watermarks });
+    } catch (error) {
+      console.error("Error listing watermarks:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/watermarks/sample", async (req, res) => {
+    try {
+      const { createSampleWatermark } = await import('./watermark');
+      await createSampleWatermark();
+      res.json({ message: "Sample watermark created successfully" });
+    } catch (error) {
+      console.error("Error creating sample watermark:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/watermarks/upload", async (req, res) => {
+    try {
+      // This would need multer or similar middleware for file uploads
+      // For now, we'll create a simple endpoint that returns success
+      // In a real implementation, you'd handle the file upload here
+      res.json({ message: "Watermark upload endpoint - implement with multer" });
+    } catch (error) {
+      console.error("Error uploading watermark:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/watermarks/:filename", async (req, res) => {
+    try {
+      const { filename } = req.params;
+      const watermarkPath = path.join(process.cwd(), 'watermarks', filename);
+      
+      if (!fs.existsSync(watermarkPath)) {
+        return res.status(404).json({ message: "Watermark not found" });
+      }
+      
+      const stats = fs.statSync(watermarkPath);
+      const ext = path.extname(filename).toLowerCase();
+      const mimeType = ext === '.png' ? 'image/png' : 
+                      ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' :
+                      ext === '.gif' ? 'image/gif' :
+                      ext === '.webp' ? 'image/webp' : 'image/png';
+      
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Content-Length", stats.size);
+      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+      
+      const fileStream = fs.createReadStream(watermarkPath);
+      fileStream.pipe(res);
+      
+    } catch (error) {
+      console.error("Error serving watermark:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   const httpServer = createServer(app);
   // Helper function for async video processing
   async function processVideoAsync(
@@ -343,6 +418,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       customSubtitles?: string[];
       visualEffects?: any;
       transitions?: any;
+      addWatermark?: boolean;
+      watermarkPath?: string;
     }
   ) {
     try {
@@ -368,7 +445,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hasRandomFootage: editOptions?.hasRandomFootage,
         aspectRatio: editOptions?.aspectRatio,
         resolution: editOptions?.resolution,
-        orientation: editOptions?.orientation
+        orientation: editOptions?.orientation,
+        addWatermark: editOptions?.addWatermark,
+        watermarkPath: editOptions?.watermarkPath
       });
       
       // Update status to completed

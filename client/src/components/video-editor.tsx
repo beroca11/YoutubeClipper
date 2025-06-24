@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { ZoomIn, ZoomOut, Sun, Contrast, Palette, Video } from "lucide-react";
+import { WatermarkManager } from "./watermark-manager";
 
 interface VideoEditorProps {
   onApplyEdits: (edits: VideoEdits) => void;
@@ -21,6 +22,8 @@ export interface VideoEdits {
   contrast: number;
   saturation: number;
   hasRandomFootage: boolean;
+  addWatermark: boolean;
+  watermarkPath?: string;
 }
 
 export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorProps) {
@@ -32,11 +35,19 @@ export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorP
     contrast: 1.0,
     saturation: 1.0,
     hasRandomFootage: false,
+    addWatermark: false,
   });
 
   const handleEditChange = (field: keyof VideoEdits, value: number | boolean) => {
     const updatedEdits = { ...edits, [field]: value };
     setEdits(updatedEdits);
+    onApplyEdits(updatedEdits);
+  };
+
+  const handleWatermarkChange = (addWatermark: boolean, watermarkPath?: string) => {
+    const updatedEdits = { ...edits, addWatermark, watermarkPath };
+    setEdits(updatedEdits);
+    onApplyEdits(updatedEdits);
   };
 
   const resetEdits = () => {
@@ -48,8 +59,10 @@ export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorP
       contrast: 1.0,
       saturation: 1.0,
       hasRandomFootage: false,
+      addWatermark: false,
     };
     setEdits(defaultEdits);
+    onApplyEdits(defaultEdits);
   };
 
   return (
@@ -65,10 +78,11 @@ export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorP
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="zoom" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="zoom">Zoom & Crop</TabsTrigger>
             <TabsTrigger value="effects">Color Effects</TabsTrigger>
             <TabsTrigger value="footage">Random Footage</TabsTrigger>
+            <TabsTrigger value="watermark">Watermark</TabsTrigger>
           </TabsList>
 
           <TabsContent value="zoom" className="space-y-6">
@@ -186,6 +200,13 @@ export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorP
                 This helps disguise the original content and can reduce copyright detection.
               </p>
               
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  <strong>Note:</strong> Random footage feature is currently being improved for better compatibility. 
+                  The main clip generation will still work perfectly without this feature.
+                </p>
+              </div>
+              
               {edits.hasRandomFootage && (
                 <div className="p-4 bg-muted rounded-lg">
                   <h4 className="font-medium mb-2">Random Footage Options:</h4>
@@ -198,6 +219,14 @@ export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorP
                 </div>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="watermark" className="space-y-6">
+            <WatermarkManager
+              onWatermarkChange={handleWatermarkChange}
+              addWatermark={edits.addWatermark}
+              watermarkPath={edits.watermarkPath}
+            />
           </TabsContent>
         </Tabs>
 

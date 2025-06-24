@@ -12,48 +12,73 @@ async function ensureRandomFootageDir() {
   return dir;
 }
 
-// Generate random footage using FFmpeg
+// Generate random footage using a simple approach without lavfi
 async function generateRandomFootage(outputPath: string, duration: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    // Create abstract patterns and shapes
-    const patterns = [
-      'testsrc2=duration={}:size=640x180:rate=30',
-      'mandelbrot=size=640x180:rate=30',
-      'life=s=640x180:mold=10:r=30:ratio=0.1:death_color=#C83232:life_color=#00ff00',
-      'noise=alls=20:allf=t+u'
-    ];
-    
-    const selectedPattern = patterns[Math.floor(Math.random() * patterns.length)];
-    const filterPattern = selectedPattern.replace('{}', duration.toString());
-    
+    // Create a simple video using a solid color approach that works with most FFmpeg builds
     ffmpeg()
-      .input(filterPattern)
-      .inputFormat('lavfi')
+      .input('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==')
+      .inputFormat('image2')
+      .loop()
       .videoCodec('libx264')
       .audioCodec('aac')
-      .complexFilter([
-        // Add some visual effects
-        '[0:v]hue=h=sin(2*PI*t)*360:s=1+0.5*sin(2*PI*t)[colored]',
-        '[colored]fade=in:0:30[faded]',
-        // Generate simple audio tone
-        'sine=frequency=220:duration=' + duration + '[audio]'
-      ])
       .outputOptions([
-        '-map', '[faded]',
-        '-map', '[audio]',
         '-t', duration.toString(),
-        '-pix_fmt', 'yuv420p'
+        '-r', '30',
+        '-pix_fmt', 'yuv420p',
+        '-vf', 'scale=640:180'
       ])
       .output(outputPath)
       .on('error', (err) => {
         console.error('Random footage generation error:', err);
-        reject(err);
+        // If this fails, try creating a minimal video without audio
+        createMinimalVideo(outputPath, duration)
+          .then(resolve)
+          .catch(reject);
       })
       .on('end', () => {
         console.log('Random footage generated successfully');
         resolve();
       })
       .run();
+  });
+}
+
+// Create a minimal video as fallback
+async function createMinimalVideo(outputPath: string, duration: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Create a simple 1x1 pixel image and scale it up
+    const pixelData = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+    const tempImagePath = path.join(path.dirname(outputPath), `temp_pixel_${Date.now()}.png`);
+    
+    fs.writeFile(tempImagePath, pixelData)
+      .then(() => {
+        ffmpeg()
+          .input(tempImagePath)
+          .loop()
+          .videoCodec('libx264')
+          .outputOptions([
+            '-t', duration.toString(),
+            '-r', '30',
+            '-pix_fmt', 'yuv420p',
+            '-vf', 'scale=640:180'
+          ])
+          .output(outputPath)
+          .on('error', (err) => {
+            console.error('Minimal video creation error:', err);
+            // Clean up temp file
+            fs.unlink(tempImagePath).catch(() => {});
+            reject(err);
+          })
+          .on('end', () => {
+            console.log('Minimal video created successfully');
+            // Clean up temp file
+            fs.unlink(tempImagePath).catch(() => {});
+            resolve();
+          })
+          .run();
+      })
+      .catch(reject);
   });
 }
 
