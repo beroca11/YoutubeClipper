@@ -262,11 +262,21 @@ export async function processVideoClip(options: ClipOptions): Promise<{
 function downloadVideo(videoUrl: string, outputPath: string, quality: string): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
-      // Download both video and audio streams
-      const stream = ytdl(videoUrl, { 
+      console.log('Attempting to download video from:', videoUrl);
+      
+      // Set YTDL options to avoid update checks and handle rate limiting
+      const options = {
         filter: 'audioandvideo',
-        quality: 'highest'
-      });
+        quality: 'highest',
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          }
+        }
+      };
+      
+      // Download both video and audio streams
+      const stream = ytdl(videoUrl, options);
       
       const writeStream = fs.createWriteStream(outputPath);
       
@@ -274,7 +284,19 @@ function downloadVideo(videoUrl: string, outputPath: string, quality: string): P
       
       stream.on('error', (error) => {
         console.error('Stream error:', error);
-        reject(error);
+        
+        // Handle specific error types
+        if (error.statusCode === 429) {
+          console.error('YouTube rate limit exceeded. This is expected in production.');
+          console.error('Will create demo video instead.');
+          reject(new Error('RATE_LIMIT_EXCEEDED'));
+        } else if (error.statusCode === 403) {
+          console.error('YouTube access forbidden. Video may be private or restricted.');
+          reject(new Error('ACCESS_FORBIDDEN'));
+        } else {
+          console.error('Unknown YouTube download error:', error.message);
+          reject(error);
+        }
       });
       
       writeStream.on('error', (error) => {
@@ -283,11 +305,12 @@ function downloadVideo(videoUrl: string, outputPath: string, quality: string): P
       });
       
       writeStream.on('finish', () => {
-        console.log('Video download completed');
+        console.log('Video download completed successfully');
         resolve();
       });
       
     } catch (error) {
+      console.error('Download setup error:', error);
       reject(error);
     }
   });
@@ -541,39 +564,39 @@ async function createDemoVideoClip(outputPath: string, startTime: number, endTim
   return new Promise((resolve, reject) => {
     const duration = endTime - startTime;
     
+    console.log('Creating demo video clip with duration:', duration);
+    
     // Create a simple colored video with text overlay showing the clip timing
     let command = ffmpeg()
       .input(`color=c=blue:size=640x360:duration=${duration}:rate=30`)
-      .inputFormat('lavfi')
-      .output(outputPath);
+      .inputFormat('lavfi');
     
-    // Add text overlay with clip information
+    // Add text overlay with clip information - using simpler filter syntax
     const textFilter = `drawtext=text='Demo Clip\\nStart: ${Math.floor(startTime)}s\\nEnd: ${Math.floor(endTime)}s\\nDuration: ${Math.floor(duration)}s':fontcolor=white:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2`;
     
     if (format === 'gif') {
       command = command
-        .complexFilter([
-          textFilter,
-          'fps=10,scale=320:180'
-        ])
-        .format('gif');
+        .videoFilters([textFilter, 'fps=10', 'scale=320:180'])
+        .format('gif')
+        .output(outputPath);
     } else if (format === 'webm') {
       command = command
-        .complexFilter(textFilter)
+        .videoFilters(textFilter)
         .videoCodec('libvpx')
         .audioCodec('libvorbis')
-        .format('webm');
+        .format('webm')
+        .output(outputPath);
     } else {
-      // MP4 default with audio generation for demo
+      // MP4 default with audio generation for demo - using separate audio input
       command = command
-        .complexFilter([
-          textFilter,
-          'anullsrc=channel_layout=stereo:sample_rate=44100'
-        ])
+        .input('anullsrc=channel_layout=stereo:sample_rate=44100')
+        .inputFormat('lavfi')
+        .videoFilters(textFilter)
         .videoCodec('libx264')
         .audioCodec('aac')
         .audioBitrate('128k')
-        .format('mp4');
+        .format('mp4')
+        .output(outputPath);
     }
     
     command
@@ -590,6 +613,52 @@ async function createDemoVideoClip(outputPath: string, startTime: number, endTim
       })
       .on('error', (error) => {
         console.error('FFmpeg demo error:', error);
+        // Fallback to even simpler approach if complex filters fail
+        console.log('Trying fallback demo video creation...');
+        createSimpleDemoVideo(outputPath, duration, format)
+          .then(resolve)
+          .catch(reject);
+      })
+      .run();
+  });
+}
+
+// Fallback function for creating very simple demo videos
+async function createSimpleDemoVideo(outputPath: string, duration: number, format: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    console.log('Creating simple demo video...');
+    
+    let command = ffmpeg()
+      .input(`color=c=red:size=640x360:duration=${duration}:rate=30`)
+      .inputFormat('lavfi');
+    
+    if (format === 'gif') {
+      command = command
+        .videoFilters(['fps=10', 'scale=320:180'])
+        .format('gif')
+        .output(outputPath);
+    } else if (format === 'webm') {
+      command = command
+        .videoCodec('libvpx')
+        .format('webm')
+        .output(outputPath);
+    } else {
+      command = command
+        .videoCodec('libx264')
+        .format('mp4')
+        .output(outputPath);
+    }
+    
+    command
+      .on('start', (commandLine) => {
+        console.log('Simple FFmpeg demo command:', commandLine);
+      })
+      .on('end', () => {
+        console.log('Simple demo video created successfully');
+        resolve();
+      })
+      .on('error', (error) => {
+        console.error('Simple FFmpeg demo error:', error);
         reject(error);
       })
       .run();
