@@ -12,6 +12,8 @@ import { eq } from 'drizzle-orm';
 import { VideoProcessor } from './video-processor';
 import path from 'path';
 import ytdl from '@distube/ytdl-core';
+import axios from 'axios';
+import ffmpeg from 'fluent-ffmpeg';
 
 const router = express.Router();
 const videoProcessor = new VideoProcessor();
@@ -296,41 +298,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const clipId = parseInt(req.params.id);
       const clip = await storage.getClip(clipId);
-      
+
+      console.log(`[Download] Request for clipId: ${clipId}, voiceover: ${req.query.voiceover}`);
+
       if (!clip || clip.processingStatus !== "completed") {
+        console.log(`[Download] Clip not ready for download: ${clipId}`);
         return res.status(404).json({ message: "Clip not ready for download" });
       }
-      
-      // Serve the actual video file
-      const filePath = getClipFilePath(clip.fileName!);
-      
-      console.log('Download request:', {
-        clipId,
-        fileName: clip.fileName,
-        filePath,
-        exists: fs.existsSync(filePath)
-      });
-      
+
+      // Check for voiceover query param
+      let filePath = getClipFilePath(clip.fileName!);
+      if (req.query.voiceover === '1') {
+        // Try to serve the voiceover version if it exists
+        const voiceoverPath = filePath.replace(/\.[^.]+$/, '_with_voiceover.mp4');
+        console.log(`[Download] Checking for voiceover file: ${voiceoverPath}`);
+        if (fs.existsSync(voiceoverPath)) {
+          filePath = voiceoverPath;
+          console.log(`[Download] Voiceover file found, serving: ${filePath}`);
+        } else {
+          console.log(`[Download] Voiceover file not found, falling back to original.`);
+        }
+      } else {
+        console.log(`[Download] Serving original file: ${filePath}`);
+      }
+
       if (!fs.existsSync(filePath)) {
-        console.error('File not found:', filePath);
+        console.log(`[Download] File not found: ${filePath}`);
         return res.status(404).json({ message: "Video file not found" });
       }
-      
+
       const stats = fs.statSync(filePath);
-      const mimeType = clip.format === 'gif' ? 'image/gif' : 
-                      clip.format === 'webm' ? 'video/webm' : 'video/mp4';
+      const mimeType = 'video/mp4';
+
+      // Set CORS headers
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Content-Disposition");
       
+      // Set content headers
       res.setHeader("Content-Type", mimeType);
       res.setHeader("Content-Length", stats.size);
       res.setHeader("Content-Disposition", `attachment; filename="${clip.fileName}"`);
-      
+      res.setHeader("Cache-Control", "no-cache");
+
+      console.log(`[Download] Serving file: ${filePath}, size: ${stats.size} bytes`);
+
       const fileStream = fs.createReadStream(filePath);
-      fileStream.pipe(res);
       
+      fileStream.on('error', (error) => {
+        console.error(`[Download] File stream error:`, error);
+        if (!res.headersSent) {
+          res.status(500).json({ message: "Error reading file" });
+        }
+      });
+      
+      fileStream.pipe(res);
+
     } catch (error) {
-      console.error("Error downloading clip:", error);
-      res.status(500).json({ message: "Internal server error" });
+      console.error(`[Download] Error downloading clip:`, error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Internal server error" });
+      }
     }
+  });
+
+  // Handle CORS preflight for download endpoint
+  app.options("/api/clips/:id/download", (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Content-Disposition");
+    res.status(200).end();
   });
 
   // AI thumbnail generation endpoint
@@ -429,6 +466,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error serving watermark:", error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Add AI Voice Over to a clip
+  app.post('/api/clips/voiceover', async (req, res) => {
+    try {
+      const { clipId } = req.body;
+      console.log('[VoiceOver] Request received:', { clipId });
+      if (!clipId) {
+        console.error('[VoiceOver] Missing clipId');
+        return res.status(400).json({ message: 'clipId is required' });
+      }
+      const clip = await storage.getClip(clipId);
+      if (!clip || !clip.fileName) {
+        console.error('[VoiceOver] Clip not found:', clipId);
+        return res.status(404).json({ message: 'Clip not found' });
+      }
+      // Fetch the associated video
+      const video = await storage.getVideo(clip.videoId);
+      if (!video) {
+        console.error('[VoiceOver] Video not found for clip:', clipId);
+        return res.status(404).json({ message: 'Video not found for clip' });
+      }
+      const clipPath = getClipFilePath(clip.fileName);
+      const audioPath = clipPath.replace(/\.[^.]+$/, '_voiceover.mp3');
+      const outputPath = clipPath.replace(/\.[^.]+$/, '_with_voiceover.mp4');
+
+      // 1. Generate narration text using AI
+      console.log('[VoiceOver] Generating narration text...');
+      const narrationScript = await aiAgent.generateNarrationForClip(clip, video);
+      console.log('[VoiceOver] Narration script:', narrationScript);
+
+      // 2. Generate TTS audio using OpenAI
+      const openaiApiKey = process.env.OPENAI_API_KEY;
+      if (!openaiApiKey) {
+        console.error('[VoiceOver] OpenAI API key not configured');
+        return res.status(500).json({ message: 'OpenAI API key not configured' });
+      }
+      console.log('[VoiceOver] Calling OpenAI TTS API...');
+      const ttsResponse = await axios.post(
+        'https://api.openai.com/v1/audio/speech',
+        {
+          model: 'tts-1',
+          input: narrationScript,
+          voice: 'alloy',
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${openaiApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          responseType: 'arraybuffer',
+        }
+      );
+      fs.writeFileSync(audioPath, ttsResponse.data);
+      const audioStats = fs.statSync(audioPath);
+      console.log(`[VoiceOver] Audio file written: ${audioPath}, size: ${audioStats.size} bytes`);
+
+      // 3. Merge audio with video using FFmpeg
+      console.log('[VoiceOver] Starting FFmpeg merge...');
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg()
+          .input(clipPath)
+          .input(audioPath)
+          .outputOptions([
+            '-map', '0:v:0',
+            '-map', '1:a:0',
+            '-c:v', 'copy',
+            '-shortest'
+          ])
+          .save(outputPath)
+          .on('start', (cmd: any) => console.log('[VoiceOver] FFmpeg command:', cmd))
+          .on('end', () => { console.log('[VoiceOver] FFmpeg merge complete:', outputPath); resolve(); })
+          .on('error', (err: any) => { console.error('[VoiceOver] FFmpeg error:', err); reject(err); });
+      });
+
+      // Update the clip's downloadUrl and status
+      const downloadUrl = `/api/clips/${clipId}/download?voiceover=1`;
+      await storage.updateClipStatus(clipId, 'completed', downloadUrl);
+      const updatedClip = await storage.getClip(clipId);
+
+      res.json({ success: true, outputPath, downloadUrl, clip: updatedClip });
+    } catch (error: any) {
+      console.error('[VoiceOver] Error:', error);
+      res.status(500).json({ message: 'Failed to add voice over', error: error.message });
     }
   });
 

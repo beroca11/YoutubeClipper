@@ -58,6 +58,7 @@ function parseDescription(description: string) {
   };
 }
 
+export type { ViralAnalysis };
 export default function AIViralAnalysis({ video, onAnalysis }: AIViralAnalysisProps) {
   const [viralAnalysis, setViralAnalysis] = useState<ViralAnalysis | null>(null);
   const [contentExplanation, setContentExplanation] = useState<ContentExplanation | null>(null);

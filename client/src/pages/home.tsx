@@ -14,6 +14,7 @@ import DownloadSection from "@/components/download-section";
 import FeaturesSection from "@/components/features-section";
 import AIViralAnalysis from "@/components/ai-viral-analysis";
 import ThumbnailGenerator from "@/components/thumbnail-generator";
+import type { ViralAnalysis } from "@/components/ai-viral-analysis";
 
 type AppStep = 'input' | 'analysis' | 'processing' | 'completed';
 
@@ -25,7 +26,7 @@ export default function Home() {
   const [processingClipId, setProcessingClipId] = useState<number | null>(null);
   const [completedClip, setCompletedClip] = useState<ClipData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [viralAnalysis, setViralAnalysis] = useState(null);
+  const [viralAnalysis, setViralAnalysis] = useState<ViralAnalysis | null>(null);
   
   const { toast } = useToast();
 
@@ -107,8 +108,47 @@ export default function Home() {
     });
   };
 
-  const handleGenerateClip = (clipData: any) => {
-    createClipMutation.mutate(clipData);
+  const handleGenerateClip = async (clipData: any) => {
+    createClipMutation.mutate(clipData, {
+      onSuccess: async (clip) => {
+        setProcessingClipId(clip.id);
+        setCurrentStep('processing');
+        toast({
+          title: "Clip creation started!",
+          description: "Your video is being processed.",
+        });
+        // If AI voice over is requested, trigger the backend workflow
+        if (clipData.aiVoiceOver && clipData.narrationScript) {
+          toast({
+            title: "Adding AI Voice Over...",
+            description: "Generating narration and merging with your video.",
+          });
+          try {
+            const response = await apiRequest('POST', '/api/clips/voiceover', {
+              clipId: clip.id,
+              narrationScript: clipData.narrationScript,
+            });
+            const result = await response.json();
+            if (result.success) {
+              // Optionally, update completedClip with the new outputPath
+              setCompletedClip({ ...clip, downloadUrl: result.outputPath });
+              setCurrentStep('completed');
+              setProcessingClipId(null);
+              toast({
+                title: "AI Voice Over Complete!",
+                description: "Your narrated video is ready.",
+              });
+            }
+          } catch (error: any) {
+            toast({
+              title: "Voice Over Failed",
+              description: error.message || 'Failed to add AI voice over.',
+              variant: "destructive",
+            });
+          }
+        }
+      },
+    });
   };
 
   const handleCreateAnother = () => {
@@ -149,7 +189,7 @@ export default function Home() {
         {currentStep !== 'input' && videoData && (
           <div className="space-y-8">
             <VideoAnalysis video={videoData} />
-            <AIViralAnalysis video={videoData} onAnalysis={setViralAnalysis} />
+            <AIViralAnalysis video={videoData} onAnalysis={(analysis) => setViralAnalysis(analysis)} />
             <ThumbnailGenerator video={videoData} thumbnailSuggestion={viralAnalysis?.thumbnailSuggestion} />
           </div>
         )}

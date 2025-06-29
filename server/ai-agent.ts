@@ -321,6 +321,30 @@ export class AIAgent {
     }
   }
 
+  async generateNarrationForClip(clip: any, video: any): Promise<string> {
+    try {
+      if (!openai) {
+        console.log('OpenAI not available, using fallback narration');
+        return `This is a highlight from the video: ${video.title}.`;
+      }
+      const prompt = `You are a professional video storyteller. Write a concise, engaging, and natural-sounding narration script (in first person, if appropriate) for a video clip based on the following details. The narration should tell the story of what happens in the clip, highlight key moments, and be suitable for voice over. Avoid a robotic tone.\n\nVIDEO TITLE: ${video.title}\nVIDEO DESCRIPTION: ${video.description || 'No description available'}\nCLIP START: ${clip.startTime}s\nCLIP END: ${clip.endTime}s\nCLIP DURATION: ${clip.endTime - clip.startTime}s\nIf you have any context about what happens in this segment, use it. Otherwise, summarize what the viewer might see or learn in this part of the video.\n\nNARRATION:`;
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: "You are a professional video narrator and scriptwriter. Write in a natural, engaging, and story-driven style." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 400
+      });
+      const narration = completion.choices[0]?.message?.content?.trim() || '';
+      return narration;
+    } catch (error) {
+      console.error('Error generating narration for clip:', error);
+      return `This is a highlight from the video: ${video.title}.`;
+    }
+  }
+
   private parseViralAnalysis(response: string, videoData: Video): ViralAnalysis {
     // Clean the response by removing asterisks and hashtags
     const cleanResponse = response.replace(/[*#]/g, '').replace(/\s+/g, ' ').trim();

@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Scissors, Play, Wand2, Crosshair } from "lucide-react";
 import { VideoData, AiSuggestion } from "@/lib/types";
+import { Switch } from "@/components/ui/switch";
 
 import VideoEditor, { VideoEdits } from "./video-editor";
 import PreviewModal from "./preview-modal";
@@ -31,6 +32,8 @@ interface ManualClipEditorProps {
     aspectRatio?: string;
     resolution?: string;
     orientation?: string;
+    aiVoiceOver?: boolean;
+    narrationScript?: string;
   }) => void;
 }
 
@@ -53,6 +56,8 @@ export default function ManualClipEditor({ video, suggestion, onGenerateClip }: 
     addWatermark: false,
     aspectRatio: "16:9",
   });
+  const [aiVoiceOver, setAiVoiceOver] = useState(false);
+  const [narrationScript, setNarrationScript] = useState("");
 
   // Update fields when suggestion changes
   useEffect(() => {
@@ -69,6 +74,17 @@ export default function ManualClipEditor({ video, suggestion, onGenerateClip }: 
       setTitle(suggestion.title);
     }
   }, [suggestion]);
+
+  // Update narration script when suggestion or title changes
+  useEffect(() => {
+    if (aiVoiceOver) {
+      if (suggestion && suggestion.description) {
+        setNarrationScript(suggestion.description);
+      } else if (title) {
+        setNarrationScript(title);
+      }
+    }
+  }, [aiVoiceOver, suggestion, title]);
 
   const startTime = startMinutes * 60 + startSeconds;
   const endTime = endMinutes * 60 + endSeconds;
@@ -127,6 +143,8 @@ export default function ManualClipEditor({ video, suggestion, onGenerateClip }: 
       ...videoEdits,
       resolution,
       orientation,
+      aiVoiceOver,
+      narrationScript: aiVoiceOver ? narrationScript : undefined,
     });
   };
 
@@ -143,6 +161,22 @@ export default function ManualClipEditor({ video, suggestion, onGenerateClip }: 
           <Scissors className="text-youtube-red mr-3 h-6 w-6" />
           Custom Clip Editor
         </h3>
+        <div className="mb-6 flex items-center gap-4">
+          <Switch id="ai-voiceover" checked={aiVoiceOver} onCheckedChange={setAiVoiceOver} />
+          <Label htmlFor="ai-voiceover" className="font-medium">Add AI Voice Over (OpenAI)</Label>
+        </div>
+        {aiVoiceOver && (
+          <div className="mb-6">
+            <Label className="block text-sm font-medium text-gray-700 mb-2">Narration Script</Label>
+            <Input
+              value={narrationScript}
+              onChange={e => setNarrationScript(e.target.value)}
+              placeholder="Enter or edit narration script for voice over"
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground mt-1">This text will be narrated by AI and merged with your video clip.</p>
+          </div>
+        )}
         
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Timeline Controls */}
