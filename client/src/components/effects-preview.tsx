@@ -8,6 +8,10 @@ interface EffectsPreviewProps {
 export default function EffectsPreview({ edits }: EffectsPreviewProps) {
   const activeEffects = [];
 
+  if (edits.aspectRatio !== "16:9") {
+    activeEffects.push(`Aspect Ratio: ${edits.aspectRatio}`);
+  }
+
   if (edits.zoomLevel !== 1.0) {
     activeEffects.push(`Zoom: ${edits.zoomLevel.toFixed(1)}x`);
   }

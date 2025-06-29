@@ -28,6 +28,9 @@ interface ManualClipEditorProps {
     contrast?: number;
     saturation?: number;
     hasRandomFootage?: boolean;
+    aspectRatio?: string;
+    resolution?: string;
+    orientation?: string;
   }) => void;
 }
 
@@ -47,6 +50,8 @@ export default function ManualClipEditor({ video, suggestion, onGenerateClip }: 
     contrast: 1.0,
     saturation: 1.0,
     hasRandomFootage: false,
+    addWatermark: false,
+    aspectRatio: "16:9",
   });
 
   // Update fields when suggestion changes
@@ -88,7 +93,29 @@ export default function ManualClipEditor({ video, suggestion, onGenerateClip }: 
 
   const handleGenerateClip = () => {
     if (clipDuration <= 0) return;
-    
+
+    // Determine resolution and orientation based on aspect ratio
+    let resolution = "1920x1080";
+    let orientation = "landscape";
+    switch (videoEdits.aspectRatio) {
+      case "16:9":
+        resolution = "1920x1080";
+        orientation = "landscape";
+        break;
+      case "4:3":
+        resolution = "1440x1080";
+        orientation = "landscape";
+        break;
+      case "1:1":
+        resolution = "1080x1080";
+        orientation = "landscape";
+        break;
+      case "9:16":
+        resolution = "1080x1920";
+        orientation = "portrait";
+        break;
+    }
+
     onGenerateClip({
       videoId: video.id,
       title: title || `${video.title} - Clip`,
@@ -98,6 +125,8 @@ export default function ManualClipEditor({ video, suggestion, onGenerateClip }: 
       format,
       isAiGenerated: !!suggestion,
       ...videoEdits,
+      resolution,
+      orientation,
     });
   };
 

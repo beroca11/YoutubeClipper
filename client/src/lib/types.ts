@@ -45,6 +45,7 @@ export interface ClipData {
   contrast?: number;
   saturation?: number;
   hasRandomFootage?: boolean;
+  aspectRatio?: string;
 }
 
 export interface AnalyzeResponse {

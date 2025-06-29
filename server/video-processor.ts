@@ -310,14 +310,48 @@ function createClip(inputPath: string, outputPath: string, startTime: number, en
     // Build video filters array
     const videoFilters: string[] = [];
     
-    // Handle vertical format (9:16 aspect ratio)
-    const isVertical = options?.aspectRatio === '9:16' || options?.orientation === 'portrait';
-    const targetResolution = options?.resolution || (isVertical ? '1080x1920' : '1920x1080');
+    // Handle different aspect ratios
+    const aspectRatio = options?.aspectRatio || '16:9';
+    let targetResolution = options?.resolution;
     
-    if (isVertical) {
-      // For vertical format, we need to crop and resize to 9:16
-      videoFilters.push(`crop=ih*9/16:ih:iw/2-ih*9/32:0`); // Crop to 9:16 from center
-      videoFilters.push(`scale=${targetResolution}`); // Scale to target resolution
+    // Set target resolution based on aspect ratio if not provided
+    if (!targetResolution) {
+      switch (aspectRatio) {
+        case '16:9':
+          targetResolution = '1920x1080';
+          break;
+        case '4:3':
+          targetResolution = '1440x1080';
+          break;
+        case '1:1':
+          targetResolution = '1080x1080';
+          break;
+        case '9:16':
+          targetResolution = '1080x1920';
+          break;
+        default:
+          targetResolution = '1920x1080';
+      }
+    }
+    
+    // Apply aspect ratio cropping and scaling
+    if (aspectRatio !== '16:9') {
+      switch (aspectRatio) {
+        case '4:3':
+          // Crop to 4:3 aspect ratio from center
+          videoFilters.push(`crop=ih*4/3:ih:iw/2-ih*2/3:0`);
+          break;
+        case '1:1':
+          // Crop to square (1:1) aspect ratio from center
+          videoFilters.push(`crop=ih:ih:iw/2-ih/2:0`);
+          break;
+        case '9:16':
+          // Crop to vertical (9:16) aspect ratio from center
+          videoFilters.push(`crop=ih*9/16:ih:iw/2-ih*9/32:0`);
+          break;
+      }
+      // Scale to target resolution
+      videoFilters.push(`scale=${targetResolution}`);
     }
     
     // Apply zoom and crop
@@ -363,7 +397,23 @@ function createClip(inputPath: string, outputPath: string, startTime: number, en
     
     // Set format-specific options with proper audio handling
     if (format === 'gif') {
-      const gifSize = isVertical ? '360x640' : '640x360';
+      let gifSize;
+      switch (aspectRatio) {
+        case '16:9':
+          gifSize = '640x360';
+          break;
+        case '4:3':
+          gifSize = '480x360';
+          break;
+        case '1:1':
+          gifSize = '360x360';
+          break;
+        case '9:16':
+          gifSize = '360x640';
+          break;
+        default:
+          gifSize = '640x360';
+      }
       command = command
         .fps(15)
         .size(gifSize)

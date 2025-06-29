@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { ZoomIn, ZoomOut, Sun, Contrast, Palette, Video } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ZoomIn, ZoomOut, Sun, Contrast, Palette, Video, Monitor } from "lucide-react";
 import { WatermarkManager } from "./watermark-manager";
 
 interface VideoEditorProps {
@@ -24,6 +25,7 @@ export interface VideoEdits {
   hasRandomFootage: boolean;
   addWatermark: boolean;
   watermarkPath?: string;
+  aspectRatio: string;
 }
 
 export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorProps) {
@@ -36,9 +38,13 @@ export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorP
     saturation: 1.0,
     hasRandomFootage: false,
     addWatermark: false,
+    aspectRatio: "16:9",
   });
 
-  const handleEditChange = (field: keyof VideoEdits, value: number | boolean) => {
+  const handleEditChange = (field: keyof VideoEdits, value: number | boolean | string) => {
+    if (field === 'aspectRatio') {
+      console.log('Aspect ratio changed to:', value);
+    }
     const updatedEdits = { ...edits, [field]: value };
     setEdits(updatedEdits);
     onApplyEdits(updatedEdits);
@@ -60,6 +66,7 @@ export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorP
       saturation: 1.0,
       hasRandomFootage: false,
       addWatermark: false,
+      aspectRatio: "16:9",
     };
     setEdits(defaultEdits);
     onApplyEdits(defaultEdits);
@@ -78,11 +85,12 @@ export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorP
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="zoom" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="zoom">Zoom & Crop</TabsTrigger>
             <TabsTrigger value="effects">Color Effects</TabsTrigger>
             <TabsTrigger value="footage">Random Footage</TabsTrigger>
             <TabsTrigger value="watermark">Watermark</TabsTrigger>
+            <TabsTrigger value="aspect-ratio">Aspect Ratio</TabsTrigger>
           </TabsList>
 
           <TabsContent value="zoom" className="space-y-6">
@@ -227,6 +235,34 @@ export default function VideoEditor({ onApplyEdits, initialEdits }: VideoEditorP
               addWatermark={edits.addWatermark}
               watermarkPath={edits.watermarkPath}
             />
+          </TabsContent>
+
+          <TabsContent value="aspect-ratio" className="space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Monitor className="h-4 w-4" />
+                  Aspect Ratio: {edits.aspectRatio}
+                </Label>
+                <Select
+                  value={edits.aspectRatio}
+                  onValueChange={(value) => handleEditChange('aspectRatio', value)}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Select aspect ratio" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="16:9">16:9 - YouTube (Landscape)</SelectItem>
+                    <SelectItem value="9:16">9:16 - TikTok/Facebook Shorts (Vertical)</SelectItem>
+                    <SelectItem value="1:1">1:1 - Instagram Square</SelectItem>
+                    <SelectItem value="4:3">4:3 - Classic TV Format</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Choose the aspect ratio that best fits your target platform
+                </p>
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
 

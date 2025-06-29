@@ -195,7 +195,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contrast: clipData.contrast,
         saturation: clipData.saturation,
         hasRandomFootage: clipData.hasRandomFootage,
-        addWatermark: req.body.addWatermark
+        addWatermark: req.body.addWatermark,
+        aspectRatio: clipData.aspectRatio,
+        resolution: req.body.resolution,
+        orientation: req.body.orientation
       });
 
       // Validate the video exists
@@ -247,9 +250,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           contrast: clipData.contrast,
           saturation: clipData.saturation,
           hasRandomFootage: safeRandomFootage, // Use safe version instead of clipData.hasRandomFootage
-          aspectRatio: "9:16", // Default to vertical format
-          resolution: "1080x1920", // Default to vertical resolution
-          orientation: "portrait", // Default to portrait orientation
+          aspectRatio: clipData.aspectRatio,
+          resolution: req.body.resolution,
+          orientation: req.body.orientation,
           customSubtitles: req.body.customSubtitles,
           visualEffects: req.body.visualEffects,
           transitions: req.body.transitions,

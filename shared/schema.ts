@@ -76,6 +76,9 @@ export const insertClipSchema = createInsertSchema(clips).omit({
   contrast: z.number().optional(),
   saturation: z.number().optional(),
   hasRandomFootage: z.boolean().optional(),
+  aspectRatio: z.string().optional(),
+  resolution: z.string().optional(),
+  orientation: z.string().optional(),
 });
 
 export const insertAiSuggestionSchema = createInsertSchema(aiSuggestions).omit({
