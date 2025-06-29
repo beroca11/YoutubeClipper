@@ -571,18 +571,22 @@ async function createDemoVideoClip(outputPath: string, startTime: number, endTim
     
     console.log('Creating demo video clip with duration:', duration);
     
-    // Create a simple colored video without complex filters
+    // Create a more informative demo video with text overlay
     let command = ffmpeg()
       .input(`color=c=blue:size=640x360:duration=${duration}:rate=30`)
       .inputFormat('lavfi');
     
+    // Add text overlay with clip information - using simpler filter syntax
+    const textFilter = `drawtext=text='Demo Clip\\nStart: ${Math.floor(startTime)}s\\nEnd: ${Math.floor(endTime)}s\\nDuration: ${Math.floor(duration)}s':fontcolor=white:fontsize=20:x=(w-text_w)/2:y=(h-text_h)/2`;
+    
     if (format === 'gif') {
       command = command
-        .videoFilters(['fps=10', 'scale=320:180'])
+        .videoFilters([textFilter, 'fps=10', 'scale=320:180'])
         .format('gif')
         .output(outputPath);
     } else if (format === 'webm') {
       command = command
+        .videoFilters(textFilter)
         .videoCodec('libvpx')
         .audioCodec('libvorbis')
         .format('webm')
@@ -590,6 +594,7 @@ async function createDemoVideoClip(outputPath: string, startTime: number, endTim
     } else {
       // MP4 default - simplified without audio for now
       command = command
+        .videoFilters(textFilter)
         .videoCodec('libx264')
         .format('mp4')
         .output(outputPath);

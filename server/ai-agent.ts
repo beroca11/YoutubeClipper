@@ -437,12 +437,108 @@ export class AIAgent {
     try {
       if (!openai) {
         console.log('OpenAI not available, using fallback narration');
-        return `This is a highlight from the video: ${video.title}.`;
+        return this.generateFallbackNarration(video.title, clip);
       }
 
-      // First, analyze the video content to understand what's happening
-      const videoAnalysis = await this.analyzeVideoContent(clip, video);
+      // Check if this is a demo video (no actual video content available)
+      const isDemoVideo = !video.actualContent || video.isDemo;
       
+      if (isDemoVideo) {
+        // Generate narration based on video title and metadata
+        return await this.generateTitleBasedNarration(video, clip);
+      }
+
+      // For actual videos, try to analyze content
+      try {
+        const videoAnalysis = await this.analyzeVideoContent(clip, video);
+        return await this.generateContentBasedNarration(videoAnalysis, video, clip);
+      } catch (analysisError) {
+        console.log('Video analysis failed, falling back to title-based narration');
+        return await this.generateTitleBasedNarration(video, clip);
+      }
+      
+    } catch (error) {
+      console.error('Error generating narration for clip:', error);
+      return this.generateFallbackNarration(video.title, clip);
+    }
+  }
+
+  private async generateTitleBasedNarration(video: any, clip: any): Promise<string> {
+    try {
+      if (!openai) {
+        return this.generateFallbackNarration(video.title, clip);
+      }
+
+      // Generate video summary for better context
+      const videoSummary = await this.generateVideoSummary(video);
+
+      const prompt = `
+        You are a professional video narrator and content creator. Create a compelling, engaging narration script for a video clip based on the video's title, metadata, and summary.
+
+        VIDEO INFORMATION:
+        - Title: "${video.title}"
+        - Description: "${video.description || 'No description available'}"
+        - Channel: "${video.channelName || 'Unknown'}"
+        - Duration: ${video.duration || 'Unknown'} seconds
+        - Clip Duration: ${clip.endTime - clip.startTime} seconds
+        - Clip Start: ${clip.startTime}s
+        - Clip End: ${clip.endTime}s
+
+        VIDEO SUMMARY:
+        ${videoSummary}
+
+        TASK: Create a narration script that:
+        1. Summarizes the key content and insights from this video
+        2. Explains what viewers can expect to learn or see
+        3. Highlights the most important points or takeaways
+        4. Uses engaging, conversational language
+        5. Maintains viewer interest throughout the clip
+        6. Provides context for the video's value and purpose
+        7. Feels like a professional documentary or educational narrator
+
+        REQUIREMENTS:
+        - Write approximately ${Math.max(30, Math.floor((clip.endTime - clip.startTime) * 2))} words
+        - Focus on the educational or entertainment value
+        - Use vivid, descriptive language
+        - Make it feel natural and conversational
+        - Include specific insights about the topic
+        - End with a compelling takeaway or call to action
+        - Reference the video summary for accurate content description
+
+        NARRATION SCRIPT:
+      `;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { 
+            role: "system", 
+            content: "You are a professional video narrator and content creator. Write engaging, educational narration that summarizes video content and provides valuable insights. Use vivid, descriptive language that captures the viewer's attention and explains complex topics in an accessible way." 
+          },
+          { 
+            role: "user", 
+            content: prompt 
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 400
+      });
+      
+      const narration = completion.choices[0]?.message?.content?.trim() || '';
+      return narration || this.generateFallbackNarration(video.title, clip);
+      
+    } catch (error) {
+      console.error('Error generating title-based narration:', error);
+      return this.generateFallbackNarration(video.title, clip);
+    }
+  }
+
+  private async generateContentBasedNarration(videoAnalysis: VideoAnalysis, video: any, clip: any): Promise<string> {
+    try {
+      if (!openai) {
+        return this.generateFallbackNarration(video.title, clip);
+      }
+
       const prompt = `
         You are a professional video narrator and storyteller. Create a compelling, real-time narration script for this specific video clip segment that describes what's happening as it unfolds.
 
@@ -495,12 +591,42 @@ export class AIAgent {
       });
       
       const narration = completion.choices[0]?.message?.content?.trim() || '';
-      return narration;
+      return narration || this.generateFallbackNarration(video.title, clip);
       
     } catch (error) {
-      console.error('Error generating narration for clip:', error);
-      return `This is a highlight from the video: ${video.title}.`;
+      console.error('Error generating content-based narration:', error);
+      return this.generateFallbackNarration(video.title, clip);
     }
+  }
+
+  private generateFallbackNarration(videoTitle: string, clip: any): string {
+    const duration = clip.endTime - clip.startTime;
+    
+    // Generate context-aware fallback narration based on video title
+    const titleLower = videoTitle.toLowerCase();
+    
+    if (titleLower.includes('tutorial') || titleLower.includes('how to') || titleLower.includes('guide')) {
+      return `In this tutorial segment, we explore the key techniques and methods that make this process so effective. Watch closely as the expert demonstrates step-by-step instructions, providing valuable insights that you can apply to your own projects. This ${duration}-second clip captures the most important moments of the learning process.`;
+    }
+    
+    if (titleLower.includes('review') || titleLower.includes('analysis')) {
+      return `This review segment provides an in-depth analysis of the key features and performance aspects. The reviewer offers detailed insights and expert opinions, helping you understand what makes this product or service stand out. This ${duration}-second clip contains the most critical evaluation points.`;
+    }
+    
+    if (titleLower.includes('interview') || titleLower.includes('conversation')) {
+      return `In this interview segment, we hear from the expert as they share valuable insights and personal experiences. The conversation reveals important perspectives and behind-the-scenes information that adds depth to the topic. This ${duration}-second clip captures the most compelling moments of the discussion.`;
+    }
+    
+    if (titleLower.includes('demo') || titleLower.includes('demonstration')) {
+      return `This demonstration showcases the practical application of key concepts and techniques. Watch as the presenter walks through the process, highlighting important details and providing real-world examples. This ${duration}-second clip shows the most effective demonstration methods.`;
+    }
+    
+    if (titleLower.includes('news') || titleLower.includes('update')) {
+      return `This news segment covers the latest developments and important updates on this topic. The information presented here provides current context and helps you stay informed about recent changes. This ${duration}-second clip contains the most relevant news and updates.`;
+    }
+    
+    // Default fallback for any other type of video
+    return `This ${duration}-second clip from "${videoTitle}" contains valuable content and insights that are worth your attention. The segment provides important information and demonstrates key concepts that viewers will find useful and engaging.`;
   }
 
   private parseViralAnalysis(response: string, videoData: Video): ViralAnalysis {
@@ -667,5 +793,106 @@ export class AIAgent {
       mood: 'Exciting and intense',
       pacing: 'Fast-paced and engaging'
     };
+  }
+
+  async generateVideoSummary(video: any): Promise<string> {
+    try {
+      if (!openai) {
+        console.log('OpenAI not available, using fallback video summary');
+        return `This video covers ${video.title} and provides valuable insights on the topic.`;
+      }
+
+      const prompt = `
+        You are an expert content analyst and video summarizer. Create a comprehensive summary of this YouTube video based on its title and metadata.
+
+        VIDEO INFORMATION:
+        - Title: "${video.title}"
+        - Description: "${video.description || 'No description available'}"
+        - Channel: "${video.channelName || 'Unknown'}"
+        - Duration: ${video.duration || 'Unknown'} seconds
+
+        TASK: Create a detailed video summary that includes:
+
+        1. MAIN TOPIC & PURPOSE (2-3 sentences):
+           - What is the video about?
+           - What is the main goal or message?
+           - Who is the target audience?
+
+        2. KEY CONTENT POINTS (5-7 bullet points):
+           - Main topics covered
+           - Important insights or lessons
+           - Key takeaways for viewers
+           - Notable moments or highlights
+           - Expert tips or advice shared
+
+        3. VALUE PROPOSITION (2-3 sentences):
+           - What value does this video provide?
+           - Why should someone watch it?
+           - What will viewers learn or gain?
+
+        4. CONTENT QUALITY ASSESSMENT (2-3 sentences):
+           - How well is the content presented?
+           - What makes this video engaging?
+           - Any unique aspects or approaches?
+
+        Write in a clear, professional tone that would be suitable for:
+        - Video descriptions
+        - Content recommendations
+        - Educational summaries
+        - Social media sharing
+
+        VIDEO SUMMARY:
+      `;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { 
+            role: "system", 
+            content: "You are an expert content analyst and video summarizer. Write comprehensive, engaging summaries that capture the essence and value of video content. Use clear, professional language that helps viewers understand what they'll gain from watching." 
+          },
+          { 
+            role: "user", 
+            content: prompt 
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 600
+      });
+      
+      const summary = completion.choices[0]?.message?.content?.trim() || '';
+      return summary || this.generateFallbackVideoSummary(video);
+      
+    } catch (error) {
+      console.error('Error generating video summary:', error);
+      return this.generateFallbackVideoSummary(video);
+    }
+  }
+
+  private generateFallbackVideoSummary(video: any): string {
+    const titleLower = video.title.toLowerCase();
+    
+    if (titleLower.includes('tutorial') || titleLower.includes('how to') || titleLower.includes('guide')) {
+      return `This tutorial video provides step-by-step guidance on ${video.title}. The content is designed to help viewers learn practical skills and techniques through clear demonstrations and expert explanations. Key topics covered include essential methods, best practices, and actionable tips that viewers can apply to their own projects. This video offers valuable educational content for anyone looking to improve their skills in this area.`;
+    }
+    
+    if (titleLower.includes('review') || titleLower.includes('analysis')) {
+      return `This review video offers an in-depth analysis of ${video.title}. The content provides detailed insights into features, performance, and overall value, helping viewers make informed decisions. The review covers key aspects including pros and cons, real-world testing, and expert recommendations. This comprehensive analysis serves as a valuable resource for anyone considering this product or service.`;
+    }
+    
+    if (titleLower.includes('interview') || titleLower.includes('conversation')) {
+      return `This interview video features an engaging conversation about ${video.title}. The discussion provides unique insights and personal perspectives from industry experts, offering viewers behind-the-scenes information and valuable context. The interview covers important topics, shares expert opinions, and reveals insights that add depth to understanding the subject matter.`;
+    }
+    
+    if (titleLower.includes('demo') || titleLower.includes('demonstration')) {
+      return `This demonstration video showcases the practical application of ${video.title}. The content provides hands-on examples and real-world scenarios that help viewers understand how concepts work in practice. The demo covers key features, demonstrates effective techniques, and shows practical implementation methods that viewers can learn from and apply.`;
+    }
+    
+    if (titleLower.includes('news') || titleLower.includes('update')) {
+      return `This news video covers the latest developments and updates regarding ${video.title}. The content provides current information and context about recent changes, helping viewers stay informed about important developments. The news segment offers timely insights and analysis that are relevant to anyone following this topic.`;
+    }
+    
+    // Default fallback for any other type of video
+    return `This video covers ${video.title} and provides valuable insights on the topic. The content offers educational value and practical information that viewers will find useful and engaging. The video presents important concepts and ideas in an accessible way, making it a valuable resource for learning and understanding this subject.`;
   }
 } 
