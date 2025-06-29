@@ -7,6 +7,11 @@ import { addRandomFootageToClip } from './random-footage';
 import { addWatermarkToClip, createSampleWatermark } from './watermark';
 import { Clip } from '../shared/schema';
 
+// Set environment variables to prevent YTDL update checks
+if (!process.env.YTDL_NO_UPDATE) {
+  process.env.YTDL_NO_UPDATE = 'true';
+}
+
 const mkdir = promisify(fs.mkdir);
 const unlink = promisify(fs.unlink);
 const exists = promisify(fs.exists);
@@ -266,8 +271,8 @@ function downloadVideo(videoUrl: string, outputPath: string, quality: string): P
       
       // Set YTDL options to avoid update checks and handle rate limiting
       const options = {
-        filter: 'audioandvideo',
-        quality: 'highest',
+        filter: 'audioandvideo' as const,
+        quality: 'highest' as const,
         requestOptions: {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -282,7 +287,7 @@ function downloadVideo(videoUrl: string, outputPath: string, quality: string): P
       
       stream.pipe(writeStream);
       
-      stream.on('error', (error) => {
+      stream.on('error', (error: any) => {
         console.error('Stream error:', error);
         
         // Handle specific error types
@@ -566,35 +571,26 @@ async function createDemoVideoClip(outputPath: string, startTime: number, endTim
     
     console.log('Creating demo video clip with duration:', duration);
     
-    // Create a simple colored video with text overlay showing the clip timing
+    // Create a simple colored video without complex filters
     let command = ffmpeg()
       .input(`color=c=blue:size=640x360:duration=${duration}:rate=30`)
       .inputFormat('lavfi');
     
-    // Add text overlay with clip information - using simpler filter syntax
-    const textFilter = `drawtext=text='Demo Clip\\nStart: ${Math.floor(startTime)}s\\nEnd: ${Math.floor(endTime)}s\\nDuration: ${Math.floor(duration)}s':fontcolor=white:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2`;
-    
     if (format === 'gif') {
       command = command
-        .videoFilters([textFilter, 'fps=10', 'scale=320:180'])
+        .videoFilters(['fps=10', 'scale=320:180'])
         .format('gif')
         .output(outputPath);
     } else if (format === 'webm') {
       command = command
-        .videoFilters(textFilter)
         .videoCodec('libvpx')
         .audioCodec('libvorbis')
         .format('webm')
         .output(outputPath);
     } else {
-      // MP4 default with audio generation for demo - using separate audio input
+      // MP4 default - simplified without audio for now
       command = command
-        .input('anullsrc=channel_layout=stereo:sample_rate=44100')
-        .inputFormat('lavfi')
-        .videoFilters(textFilter)
         .videoCodec('libx264')
-        .audioCodec('aac')
-        .audioBitrate('128k')
         .format('mp4')
         .output(outputPath);
     }
@@ -659,6 +655,51 @@ async function createSimpleDemoVideo(outputPath: string, duration: number, forma
       })
       .on('error', (error) => {
         console.error('Simple FFmpeg demo error:', error);
+        // Final fallback - create a basic video without any filters
+        console.log('Trying final fallback - basic video creation...');
+        createBasicVideo(outputPath, duration, format)
+          .then(resolve)
+          .catch(reject);
+      })
+      .run();
+  });
+}
+
+// Final fallback - create the most basic video possible
+async function createBasicVideo(outputPath: string, duration: number, format: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    console.log('Creating basic video as final fallback...');
+    
+    let command = ffmpeg()
+      .input(`color=c=green:size=320x240:duration=${duration}:rate=1`)
+      .inputFormat('lavfi');
+    
+    if (format === 'gif') {
+      command = command
+        .format('gif')
+        .output(outputPath);
+    } else if (format === 'webm') {
+      command = command
+        .videoCodec('libvpx')
+        .format('webm')
+        .output(outputPath);
+    } else {
+      command = command
+        .videoCodec('libx264')
+        .format('mp4')
+        .output(outputPath);
+    }
+    
+    command
+      .on('start', (commandLine) => {
+        console.log('Basic FFmpeg command:', commandLine);
+      })
+      .on('end', () => {
+        console.log('Basic video created successfully');
+        resolve();
+      })
+      .on('error', (error) => {
+        console.error('Basic FFmpeg error:', error);
         reject(error);
       })
       .run();

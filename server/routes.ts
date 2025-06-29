@@ -570,7 +570,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .input(clipPath)
           .input(audioPath)
           .outputOptions([
-            '-map', '0:v:0',
+            '-map', '0:v?',  // Use optional video stream mapping
             '-map', '1:a:0',
             '-c:v', 'copy',
             '-shortest'
@@ -578,7 +578,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .save(outputPath)
           .on('start', (cmd: any) => console.log('[VoiceOver] FFmpeg command:', cmd))
           .on('end', () => { console.log('[VoiceOver] FFmpeg merge complete:', outputPath); resolve(); })
-          .on('error', (err: any) => { console.error('[VoiceOver] FFmpeg error:', err); reject(err); });
+          .on('error', (err: any) => { 
+            console.error('[VoiceOver] FFmpeg error:', err); 
+            // Try alternative approach if stream mapping fails
+            console.log('[VoiceOver] Trying alternative FFmpeg approach...');
+            ffmpeg()
+              .input(clipPath)
+              .input(audioPath)
+              .outputOptions([
+                '-c:v', 'copy',
+                '-c:a', 'aac',
+                '-shortest'
+              ])
+              .save(outputPath)
+              .on('start', (cmd: any) => console.log('[VoiceOver] Alternative FFmpeg command:', cmd))
+              .on('end', () => { console.log('[VoiceOver] Alternative FFmpeg merge complete:', outputPath); resolve(); })
+              .on('error', (err2: any) => { 
+                console.error('[VoiceOver] Alternative FFmpeg error:', err2); 
+                reject(err2); 
+              });
+          });
       });
 
       // Update the clip's downloadUrl and status
