@@ -67,6 +67,16 @@ function generateAiSuggestions(duration: number) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
+  // Health check endpoint for Render
+  app.get("/health", (req, res) => {
+    res.status(200).json({ 
+      status: "healthy", 
+      timestamp: new Date().toISOString(),
+      service: "youtube-clipper",
+      version: "1.0.0"
+    });
+  });
+  
   // Analyze YouTube video
   app.post("/api/analyze", async (req, res) => {
     try {

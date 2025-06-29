@@ -20,6 +20,50 @@ npm run dev
 npm run open
 ```
 
+## Deployment
+
+### Render Deployment (Recommended)
+
+The easiest way to deploy YouTube Clipper is using Render:
+
+#### Quick Deploy
+1. **Using Blueprint (Recommended):**
+   - Fork or push this repository to GitHub
+   - Go to [Render Dashboard](https://dashboard.render.com)
+   - Click "New +" → "Blueprint"
+   - Connect your repository
+   - Render will automatically detect the `render.yaml` configuration
+
+2. **Manual Setup:**
+   - Go to [Render Dashboard](https://dashboard.render.com)
+   - Click "New +" → "Web Service"
+   - Connect your repository
+   - Set build command: `npm install && npm run build`
+   - Set start command: `npm start`
+
+#### Environment Variables
+Configure these in your Render service dashboard:
+- `DATABASE_URL` - Your Neon database connection string
+- `FIREBASE_API_KEY` - Firebase API key
+- `FIREBASE_AUTH_DOMAIN` - Firebase auth domain
+- `FIREBASE_PROJECT_ID` - Firebase project ID
+- `FIREBASE_STORAGE_BUCKET` - Firebase storage bucket
+- `FIREBASE_MESSAGING_SENDER_ID` - Firebase messaging sender ID
+- `FIREBASE_APP_ID` - Firebase app ID
+- `OPENAI_API_KEY` - OpenAI API key
+- `SESSION_SECRET` - Random session secret
+
+#### Deployment Scripts
+```bash
+# Linux/Mac
+./deploy-render.sh
+
+# Windows
+deploy-render.bat
+```
+
+For detailed deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+
 ## Performance Optimizations
 
 ### Frontend
@@ -47,12 +91,14 @@ npm run open
 - `npm run open` - Open browser to localhost:5000
 - `npm run build` - Build for production
 - `npm run start` - Start production server
+- `npm run deploy:render` - Build and start for Render deployment
 - `clear-cache.bat` - Clear Vite cache (fixes 504 errors)
 
 ## URLs
 
 - Local: http://localhost:5000
 - Network: http://0.0.0.0:5000
+- Health Check: http://localhost:5000/health
 
 ## Troubleshooting
 
