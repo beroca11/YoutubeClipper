@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import type { Video } from '@shared/schema';
 import fs from 'fs';
 import path from 'path';
+import ffmpeg from 'fluent-ffmpeg';
 
 // Initialize OpenAI client with better error handling
 let openai: OpenAI | null = null;
@@ -343,45 +344,89 @@ export class AIAgent {
         return this.getDefaultVideoAnalysis(clip, video);
       }
 
-      // Get the clip file path
-      const clipFilePath = path.join(process.cwd(), 'uploads', 'clips', clip.fileName);
-      
-      // Check if the clip file exists
-      if (!fs.existsSync(clipFilePath)) {
-        console.log('Clip file not found, using fallback analysis');
+      // Get the actual video file path for analysis
+      const videoPath = await this.getVideoFilePath(video);
+      if (!videoPath || !fs.existsSync(videoPath)) {
+        console.log('Video file not found for analysis, using fallback');
         return this.getDefaultVideoAnalysis(clip, video);
       }
 
-      // Extract key frames for analysis
-      const frameAnalysis = await this.extractAndAnalyzeFrames(clipFilePath, clip);
-
+      console.log('Analyzing actual video content from:', videoPath);
+      
+      // Extract frames from the video for analysis
+      const frameAnalysis = await this.extractAndAnalyzeFrames(videoPath, clip);
+      
       const prompt = `
-        You are an expert video content analyst specializing in real-time scene analysis. Analyze this video clip segment and provide detailed insights about what's happening visually and audibly.
+        You are an expert video content analyst. Analyze this video segment and provide detailed insights about what's happening.
 
-        VIDEO CONTEXT:
-        - Title: ${video.title}
-        - Description: ${video.description || 'No description available'}
+        VIDEO INFORMATION:
+        - Title: "${video.title}"
+        - Description: "${video.description || 'No description available'}"
+        - Duration: ${video.duration || 'Unknown'} seconds
         - Clip Start: ${clip.startTime}s
         - Clip End: ${clip.endTime}s
         - Clip Duration: ${clip.endTime - clip.startTime}s
-        - Clip File: ${clip.fileName}
 
-        ${frameAnalysis ? `FRAME ANALYSIS: ${frameAnalysis}` : ''}
+        FRAME ANALYSIS:
+        ${frameAnalysis || 'No frame analysis available'}
 
-        Based on the video title, description, timing, and frame analysis, provide a detailed scene-specific analysis. Consider:
+        TASK: Provide a comprehensive analysis of this video segment including:
 
-        1. SCENE DESCRIPTION: What is the main action or event happening in this clip?
-        2. VISUAL ELEMENTS: What visual elements, effects, or cinematography techniques are present?
-        3. AUDIO ELEMENTS: What sounds, music, or audio effects might be present?
-        4. ACTION SEQUENCE: What specific actions or movements occur in this segment?
-        5. EMOTIONAL TONE: What is the emotional atmosphere and mood?
-        6. KEY MOMENTS: What are the most important or memorable moments in this clip?
-        7. CHARACTERS: Who are the main characters or subjects in this scene?
-        8. SETTING: What is the location or environment?
-        9. MOOD: What is the overall feeling or atmosphere?
-        10. PACING: How fast or slow is the action moving?
+        1. SCENE DESCRIPTION (2-3 sentences):
+           - What is happening in this video segment?
+           - What is the main action or content?
+           - What is the visual setting and context?
 
-        Provide a detailed, scene-specific analysis that captures the essence of what happens in this exact time segment. Be specific about the visual and audio elements that would make this clip engaging and memorable.
+        2. VISUAL ELEMENTS (list 3-5 key elements):
+           - Camera angles and movements
+           - Lighting and visual effects
+           - Colors and visual style
+           - Text overlays or graphics
+           - Visual composition
+
+        3. AUDIO ELEMENTS (list 2-4 elements):
+           - Background music or sound effects
+           - Voice narration or dialogue
+           - Audio quality and style
+           - Sound transitions
+
+        4. ACTION SEQUENCE (list 3-5 actions):
+           - What actions are taking place?
+           - How do events unfold?
+           - Key moments or transitions
+           - Movement and pacing
+
+        5. EMOTIONAL TONE (1-2 sentences):
+           - What is the emotional atmosphere?
+           - How does the content make viewers feel?
+           - Mood and energy level
+
+        6. KEY MOMENTS (list 2-4 moments):
+           - Most important or memorable moments
+           - Turning points or highlights
+           - Peak moments of interest
+
+        7. CHARACTERS/SUBJECTS (list 1-3):
+           - Who or what is the main focus?
+           - Key people or subjects shown
+           - Their role or significance
+
+        8. SETTING (1-2 sentences):
+           - Where does this take place?
+           - Physical or digital environment
+           - Context and background
+
+        9. MOOD (1 sentence):
+           - Overall atmosphere and feeling
+           - Tone and style
+
+        10. PACING (1 sentence):
+            - How fast or slow is the content?
+            - Rhythm and flow
+
+        Write in a clear, analytical style that captures the essence of what's happening in this video segment.
+
+        ANALYSIS:
       `;
 
       const completion = await openai.chat.completions.create({
@@ -389,7 +434,7 @@ export class AIAgent {
         messages: [
           {
             role: "system",
-            content: "You are an expert video content analyst with deep knowledge of cinematography, visual storytelling, and audio-visual media. You can analyze video content and provide detailed insights about scenes, actions, emotions, and technical elements. Be specific and descriptive in your analysis."
+            content: "You are an expert video content analyst. Provide detailed, accurate analysis of video content based on visual and contextual information. Focus on what's actually happening in the video, not generic descriptions."
           },
           {
             role: "user",
@@ -409,27 +454,157 @@ export class AIAgent {
     }
   }
 
-  private async extractAndAnalyzeFrames(videoPath: string, clip: any): Promise<string | null> {
+  private async getVideoFilePath(video: any): Promise<string | null> {
     try {
-      // This is a placeholder for frame extraction and analysis
-      // In a full implementation, you would:
-      // 1. Use FFmpeg to extract key frames from the video
-      // 2. Use computer vision APIs (like Google Vision, Azure Computer Vision, or OpenAI's Vision) to analyze the frames
-      // 3. Return structured analysis of what's visible in the frames
+      // Check if we have a cached video file
+      const cacheDir = path.join(process.cwd(), 'uploads', 'cache');
+      const videoId = video.youtubeId || video.id;
       
-      const clipDuration = clip.endTime - clip.startTime;
-      const frameCount = Math.min(3, Math.floor(clipDuration / 10)); // Extract up to 3 frames, one every 10 seconds
-      
-      if (frameCount === 0) {
+      if (!videoId) {
+        console.log('No video ID available for file lookup');
         return null;
       }
 
-      // For now, return a contextual analysis based on the video title and timing
-      return `Based on the video content analysis, this clip appears to contain dynamic action sequences with professional cinematography. The scene likely features engaging visual elements and compelling action.`;
+      // Look for cached video files
+      const possibleFiles = [
+        path.join(cacheDir, `${videoId}_highest.mp4`),
+        path.join(cacheDir, `${videoId}_medium.mp4`),
+        path.join(cacheDir, `${videoId}_lowest.mp4`),
+        path.join(cacheDir, `${videoId}.mp4`)
+      ];
+
+      for (const filePath of possibleFiles) {
+        if (fs.existsSync(filePath)) {
+          console.log('Found video file for analysis:', filePath);
+          return filePath;
+        }
+      }
+
+      console.log('No cached video file found for analysis');
+      return null;
       
     } catch (error) {
-      console.error('Error extracting and analyzing frames:', error);
+      console.error('Error finding video file:', error);
       return null;
+    }
+  }
+
+  private async extractAndAnalyzeFrames(videoPath: string, clip: any): Promise<string | null> {
+    try {
+      console.log('Extracting frames for analysis...');
+      
+      // Extract frames at different timestamps within the clip
+      const frameTimestamps = [
+        clip.startTime + (clip.endTime - clip.startTime) * 0.25, // 25% into clip
+        clip.startTime + (clip.endTime - clip.startTime) * 0.5,  // 50% into clip
+        clip.startTime + (clip.endTime - clip.startTime) * 0.75  // 75% into clip
+      ];
+
+      const frameDescriptions: string[] = [];
+
+      for (let i = 0; i < frameTimestamps.length; i++) {
+        const timestamp = frameTimestamps[i];
+        const framePath = path.join(process.cwd(), 'uploads', 'temp', `frame_${i}_${Date.now()}.jpg`);
+        
+        try {
+          // Ensure temp directory exists
+          const tempDir = path.dirname(framePath);
+          if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+          }
+
+          // Extract frame using FFmpeg
+          await new Promise<void>((resolve, reject) => {
+            ffmpeg(videoPath)
+              .seekInput(timestamp)
+              .frames(1)
+              .output(framePath)
+              .on('end', () => resolve())
+              .on('error', (err) => reject(err))
+              .run();
+          });
+
+          // Analyze the frame using AI
+          const frameDescription = await this.analyzeFrame(framePath);
+          frameDescriptions.push(`Frame ${i + 1} (${Math.floor(timestamp)}s): ${frameDescription}`);
+          
+          // Clean up frame file
+          try {
+            fs.unlinkSync(framePath);
+          } catch (cleanupError) {
+            console.warn('Failed to clean up frame file:', cleanupError);
+          }
+          
+        } catch (frameError) {
+          console.error(`Failed to extract frame ${i + 1}:`, frameError);
+          frameDescriptions.push(`Frame ${i + 1} (${Math.floor(timestamp)}s): Unable to extract frame`);
+        }
+      }
+
+      return frameDescriptions.join('\n');
+      
+    } catch (error) {
+      console.error('Error extracting frames:', error);
+      return null;
+    }
+  }
+
+  private async analyzeFrame(framePath: string): Promise<string> {
+    try {
+      if (!openai) {
+        return 'Frame analysis not available';
+      }
+
+      // Convert frame to base64 for analysis
+      const frameBuffer = fs.readFileSync(framePath);
+      const base64Image = frameBuffer.toString('base64');
+
+      const prompt = `
+        Analyze this video frame and describe what you see in detail.
+
+        TASK: Provide a concise but detailed description of the visual content including:
+        - What objects, people, or elements are visible
+        - The setting or environment
+        - Any text, graphics, or overlays
+        - Colors, lighting, and visual style
+        - The overall composition and mood
+
+        Keep the description focused and factual, describing what's actually visible in the frame.
+
+        FRAME DESCRIPTION:
+      `;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert visual analyst. Describe video frames accurately and in detail, focusing on what's actually visible in the image."
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: prompt
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/jpeg;base64,${base64Image}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 200
+      });
+
+      return completion.choices[0]?.message?.content?.trim() || 'Unable to analyze frame';
+      
+    } catch (error) {
+      console.error('Error analyzing frame:', error);
+      return 'Frame analysis failed';
     }
   }
 
@@ -440,20 +615,13 @@ export class AIAgent {
         return this.generateFallbackNarration(video.title, clip);
       }
 
-      // Check if this is a demo video (no actual video content available)
-      const isDemoVideo = !video.actualContent || video.isDemo;
-      
-      if (isDemoVideo) {
-        // Generate narration based on video title and metadata
-        return await this.generateTitleBasedNarration(video, clip);
-      }
-
-      // For actual videos, try to analyze content
+      // First, try to analyze the actual video content
       try {
         const videoAnalysis = await this.analyzeVideoContent(clip, video);
+        console.log('Video analysis successful, generating content-based narration');
         return await this.generateContentBasedNarration(videoAnalysis, video, clip);
       } catch (analysisError) {
-        console.log('Video analysis failed, falling back to title-based narration');
+        console.log('Video analysis failed, falling back to title-based narration:', analysisError);
         return await this.generateTitleBasedNarration(video, clip);
       }
       
@@ -540,7 +708,7 @@ export class AIAgent {
       }
 
       const prompt = `
-        You are a professional video narrator and storyteller. Create a compelling, real-time narration script for this specific video clip segment that describes what's happening as it unfolds.
+        You are a professional video narrator and storyteller. Create a compelling, real-time narration script for this specific video clip segment based on the actual video analysis.
 
         VIDEO ANALYSIS:
         - Scene: ${videoAnalysis.sceneDescription}
@@ -559,17 +727,23 @@ export class AIAgent {
         - Start Time: ${clip.startTime}s
         - End Time: ${clip.endTime}s
 
-        Create a narration script that:
-        1. Describes the action as it happens in real-time
-        2. Captures the emotional intensity and atmosphere
-        3. Highlights key visual and audio elements
-        4. Maintains engaging pacing that matches the scene
-        5. Uses vivid, descriptive language
-        6. Feels natural and conversational, not robotic
-        7. Builds tension and excitement where appropriate
-        8. Provides context for what the viewer is seeing
+        TASK: Create a narration script that:
+        1. Describes the actual action and content happening in this specific video segment
+        2. References the specific visual elements and actions identified in the analysis
+        3. Captures the emotional tone and atmosphere of the scene
+        4. Highlights the key moments and characters shown
+        5. Uses vivid, descriptive language that matches what's actually happening
+        6. Feels natural and conversational, like a professional narrator
+        7. Provides context for what the viewer is seeing
+        8. Maintains engaging pacing that matches the scene's rhythm
 
-        The narration should be approximately ${Math.max(30, Math.floor((clip.endTime - clip.startTime) * 2))} words to match the clip duration. Make it feel like a professional sports commentator or documentary narrator describing the action as it unfolds.
+        REQUIREMENTS:
+        - Write approximately ${Math.max(30, Math.floor((clip.endTime - clip.startTime) * 2))} words
+        - Be specific about the actual content shown in the video
+        - Reference the visual elements, actions, and characters from the analysis
+        - Match the emotional tone and mood identified
+        - Use descriptive language that captures the scene accurately
+        - Make it feel like a professional documentary or sports commentator
 
         NARRATION SCRIPT:
       `;
@@ -579,7 +753,7 @@ export class AIAgent {
         messages: [
           { 
             role: "system", 
-            content: "You are a professional video narrator and storyteller. Write engaging, real-time narration that describes action as it happens. Use vivid, descriptive language that captures the energy and emotion of the scene. Write in a natural, conversational tone that feels like a professional commentator or documentary narrator." 
+            content: "You are a professional video narrator and storyteller. Write engaging, accurate narration that describes the actual content happening in the video. Use the video analysis to create specific, detailed descriptions that match what's really happening on screen." 
           },
           { 
             role: "user", 

@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import { addRandomFootageToClip } from './random-footage';
 import { addWatermarkToClip, createSampleWatermark } from './watermark';
 import { Clip } from '../shared/schema';
+import axios from 'axios';
 
 // Set environment variables to prevent YTDL update checks
 if (!process.env.YTDL_NO_UPDATE) {
@@ -116,18 +117,17 @@ export async function processVideoClip(options: ClipOptions): Promise<{
     let tempVideoPath = videoCache.get(youtubeId);
     
     if (!tempVideoPath || !(await exists(tempVideoPath))) {
-      // Download and cache the video
+      // Download and cache the video with multiple retry strategies
       tempVideoPath = path.join(CACHE_DIR, `${youtubeId}_${quality}.mp4`);
       
       try {
         console.log('Downloading video from YouTube...');
-        await downloadVideo(videoUrl, tempVideoPath, quality);
+        await downloadVideoWithRetries(videoUrl, tempVideoPath, quality);
         videoCache.set(youtubeId, tempVideoPath);
         console.log('Video cached successfully');
       } catch (downloadError) {
-        console.log('YouTube download failed, creating demo video clip...');
-        tempVideoPath = path.join(UPLOADS_DIR, `temp_${youtubeId}_${Date.now()}.mp4`);
-        await createDemoVideoClip(tempVideoPath, startTime, endTime, format);
+        console.error('All download methods failed:', downloadError);
+        throw new Error('Failed to download video. Please try again later or check if the video is available.');
       }
     } else {
       console.log('Using cached video file');
@@ -264,12 +264,48 @@ export async function processVideoClip(options: ClipOptions): Promise<{
   }
 }
 
-function downloadVideo(videoUrl: string, outputPath: string, quality: string): Promise<void> {
+async function downloadVideoWithRetries(videoUrl: string, outputPath: string, quality: string): Promise<void> {
+  const maxRetries = 3;
+  const retryDelay = 2000; // 2 seconds
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Download attempt ${attempt}/${maxRetries} for:`, videoUrl);
+      
+      // Try different download strategies
+      if (attempt === 1) {
+        // First attempt: Standard ytdl-core download
+        await downloadVideoStandard(videoUrl, outputPath, quality);
+      } else if (attempt === 2) {
+        // Second attempt: Alternative quality settings
+        await downloadVideoAlternative(videoUrl, outputPath, quality);
+      } else {
+        // Third attempt: Lowest quality for compatibility
+        await downloadVideoLowest(videoUrl, outputPath);
+      }
+      
+      console.log(`Download successful on attempt ${attempt}`);
+      return;
+      
+    } catch (error: any) {
+      console.error(`Download attempt ${attempt} failed:`, error.message);
+      
+      if (attempt === maxRetries) {
+        throw new Error(`Failed to download video after ${maxRetries} attempts: ${error.message}`);
+      }
+      
+      // Wait before retrying
+      console.log(`Waiting ${retryDelay}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
+  }
+}
+
+function downloadVideoStandard(videoUrl: string, outputPath: string, quality: string): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
-      console.log('Attempting to download video from:', videoUrl);
+      console.log('Attempting standard download...');
       
-      // Set YTDL options to avoid update checks and handle rate limiting
       const options = {
         filter: 'audioandvideo' as const,
         quality: 'highest' as const,
@@ -280,28 +316,14 @@ function downloadVideo(videoUrl: string, outputPath: string, quality: string): P
         }
       };
       
-      // Download both video and audio streams
       const stream = ytdl(videoUrl, options);
-      
       const writeStream = fs.createWriteStream(outputPath);
       
       stream.pipe(writeStream);
       
       stream.on('error', (error: any) => {
-        console.error('Stream error:', error);
-        
-        // Handle specific error types
-        if (error.statusCode === 429) {
-          console.error('YouTube rate limit exceeded. This is expected in production.');
-          console.error('Will create demo video instead.');
-          reject(new Error('RATE_LIMIT_EXCEEDED'));
-        } else if (error.statusCode === 403) {
-          console.error('YouTube access forbidden. Video may be private or restricted.');
-          reject(new Error('ACCESS_FORBIDDEN'));
-        } else {
-          console.error('Unknown YouTube download error:', error.message);
-          reject(error);
-        }
+        console.error('Standard download error:', error);
+        reject(error);
       });
       
       writeStream.on('error', (error) => {
@@ -310,12 +332,96 @@ function downloadVideo(videoUrl: string, outputPath: string, quality: string): P
       });
       
       writeStream.on('finish', () => {
-        console.log('Video download completed successfully');
+        console.log('Standard download completed successfully');
         resolve();
       });
       
     } catch (error) {
-      console.error('Download setup error:', error);
+      console.error('Standard download setup error:', error);
+      reject(error);
+    }
+  });
+}
+
+function downloadVideoAlternative(videoUrl: string, outputPath: string, quality: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      console.log('Attempting alternative download...');
+      
+      const options = {
+        filter: 'audioandvideo' as const,
+        quality: 'medium' as const,
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          }
+        }
+      };
+      
+      const stream = ytdl(videoUrl, options);
+      const writeStream = fs.createWriteStream(outputPath);
+      
+      stream.pipe(writeStream);
+      
+      stream.on('error', (error: any) => {
+        console.error('Alternative download error:', error);
+        reject(error);
+      });
+      
+      writeStream.on('error', (error) => {
+        console.error('Write stream error:', error);
+        reject(error);
+      });
+      
+      writeStream.on('finish', () => {
+        console.log('Alternative download completed successfully');
+        resolve();
+      });
+      
+    } catch (error) {
+      console.error('Alternative download setup error:', error);
+      reject(error);
+    }
+  });
+}
+
+function downloadVideoLowest(videoUrl: string, outputPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      console.log('Attempting lowest quality download...');
+      
+      const options = {
+        filter: 'audioandvideo' as const,
+        quality: 'lowest' as const,
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          }
+        }
+      };
+      
+      const stream = ytdl(videoUrl, options);
+      const writeStream = fs.createWriteStream(outputPath);
+      
+      stream.pipe(writeStream);
+      
+      stream.on('error', (error: any) => {
+        console.error('Lowest quality download error:', error);
+        reject(error);
+      });
+      
+      writeStream.on('error', (error) => {
+        console.error('Write stream error:', error);
+        reject(error);
+      });
+      
+      writeStream.on('finish', () => {
+        console.log('Lowest quality download completed successfully');
+        resolve();
+      });
+      
+    } catch (error) {
+      console.error('Lowest quality download setup error:', error);
       reject(error);
     }
   });
