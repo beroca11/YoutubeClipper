@@ -37,6 +37,11 @@ export const clips = pgTable("clips", {
   contrast: real("contrast").default(1.0),
   saturation: real("saturation").default(1.0),
   hasRandomFootage: boolean("has_random_footage").default(false),
+  // Voiceover features
+  aiVoiceOver: boolean("ai_voice_over").default(false),
+  narrationScript: text("narration_script"),
+  voiceoverAdded: boolean("voiceover_added").default(false),
+  voiceoverProcessing: boolean("voiceover_processing").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -79,6 +84,10 @@ export const insertClipSchema = createInsertSchema(clips).omit({
   aspectRatio: z.string().optional(),
   resolution: z.string().optional(),
   orientation: z.string().optional(),
+  aiVoiceOver: z.boolean().optional(),
+  narrationScript: z.string().optional(),
+  voiceoverAdded: z.boolean().optional(),
+  voiceoverProcessing: z.boolean().optional(),
 });
 
 export const insertAiSuggestionSchema = createInsertSchema(aiSuggestions).omit({

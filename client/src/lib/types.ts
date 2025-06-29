@@ -46,6 +46,11 @@ export interface ClipData {
   saturation?: number;
   hasRandomFootage?: boolean;
   aspectRatio?: string;
+  // Voiceover features
+  aiVoiceOver?: boolean;
+  narrationScript?: string;
+  voiceoverAdded?: boolean;
+  voiceoverProcessing?: boolean;
 }
 
 export interface AnalyzeResponse {

@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { Cog, Check, Loader2, Circle } from "lucide-react";
+import { Cog, Check, Loader2, Circle, Mic } from "lucide-react";
 
 interface ProcessingStatusProps {
   progress: number;
+  step: 'processing' | 'voiceover';
+  voiceoverRequested: boolean;
 }
 
-export default function ProcessingStatus({ progress }: ProcessingStatusProps) {
+export default function ProcessingStatus({ progress, step, voiceoverRequested }: ProcessingStatusProps) {
   const [animatedProgress, setAnimatedProgress] = useState(0);
 
   useEffect(() => {
@@ -15,21 +17,46 @@ export default function ProcessingStatus({ progress }: ProcessingStatusProps) {
     return () => clearTimeout(timer);
   }, [progress]);
 
-  const steps = [
-    { label: "Video analysis complete", completed: progress > 20 },
-    { label: "Cutting video segment...", completed: progress > 60, inProgress: progress > 20 && progress <= 80 },
-    { label: "Optimizing output", completed: progress > 80, inProgress: progress > 60 && progress <= 100 },
-  ];
+  const getSteps = () => {
+    if (step === 'processing') {
+      return [
+        { label: "Video analysis complete", completed: progress > 20 },
+        { label: "Cutting video segment...", completed: progress > 60, inProgress: progress > 20 && progress <= 80 },
+        { label: "Optimizing output", completed: progress > 80, inProgress: progress > 60 && progress <= 100 },
+      ];
+    } else {
+      // Voiceover step
+      return [
+        { label: "Video processing complete", completed: true },
+        { label: "Generating AI narration...", completed: progress > 85, inProgress: progress > 80 && progress <= 95 },
+        { label: "Merging audio with video", completed: progress > 95, inProgress: progress > 85 && progress <= 100 },
+        { label: "Finalizing with voiceover", completed: progress === 100, inProgress: progress > 95 && progress < 100 },
+      ];
+    }
+  };
+
+  const steps = getSteps();
 
   return (
     <section className="mb-12">
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 text-center">
         <div className="mb-6">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-red-50 rounded-full mb-4">
-            <Cog className="text-youtube-red text-3xl h-12 w-12 animate-spin" />
+            {step === 'voiceover' ? (
+              <Mic className="text-youtube-red text-3xl h-12 w-12 animate-pulse" />
+            ) : (
+              <Cog className="text-youtube-red text-3xl h-12 w-12 animate-spin" />
+            )}
           </div>
-          <h3 className="text-xl font-semibold youtube-dark mb-2">Processing Your Clip</h3>
-          <p className="youtube-gray">AI is analyzing and cutting your video clip...</p>
+          <h3 className="text-xl font-semibold youtube-dark mb-2">
+            {step === 'voiceover' ? 'Adding AI Voice Over' : 'Processing Your Clip'}
+          </h3>
+          <p className="youtube-gray">
+            {step === 'voiceover' 
+              ? 'AI is generating narration and merging it with your video...'
+              : 'AI is analyzing and cutting your video clip...'
+            }
+          </p>
         </div>
         
         <div className="max-w-md mx-auto mb-6">

@@ -10,7 +10,7 @@ export interface IStorage {
   getClip(id: number): Promise<Clip | undefined>;
   getClipsByVideoId(videoId: number): Promise<Clip[]>;
   createClip(clip: InsertClip): Promise<Clip>;
-  updateClipStatus(id: number, status: string, downloadUrl?: string, fileSize?: number): Promise<Clip | undefined>;
+  updateClipStatus(id: number, status: string, downloadUrl?: string, fileSize?: number, voiceoverAdded?: boolean, voiceoverProcessing?: boolean): Promise<Clip | undefined>;
   
   // AI Suggestion operations
   getAiSuggestionsByVideoId(videoId: number): Promise<AiSuggestion[]>;
@@ -90,12 +90,16 @@ export class MemStorage implements IStorage {
       contrast: insertClip.contrast ?? 1.0,
       saturation: insertClip.saturation ?? 1.0,
       hasRandomFootage: insertClip.hasRandomFootage ?? false,
+      aiVoiceOver: insertClip.aiVoiceOver ?? false,
+      narrationScript: insertClip.narrationScript ?? null,
+      voiceoverAdded: insertClip.voiceoverAdded ?? false,
+      voiceoverProcessing: insertClip.voiceoverProcessing ?? false,
     };
     this.clips.set(id, clip);
     return clip;
   }
 
-  async updateClipStatus(id: number, status: string, downloadUrl?: string, fileSize?: number): Promise<Clip | undefined> {
+  async updateClipStatus(id: number, status: string, downloadUrl?: string, fileSize?: number, voiceoverAdded?: boolean, voiceoverProcessing?: boolean): Promise<Clip | undefined> {
     const clip = this.clips.get(id);
     if (!clip) return undefined;
     
@@ -104,6 +108,8 @@ export class MemStorage implements IStorage {
       processingStatus: status,
       downloadUrl: downloadUrl || clip.downloadUrl,
       fileSize: fileSize || clip.fileSize,
+      voiceoverAdded: voiceoverAdded !== undefined ? voiceoverAdded : clip.voiceoverAdded,
+      voiceoverProcessing: voiceoverProcessing !== undefined ? voiceoverProcessing : clip.voiceoverProcessing,
     };
     
     this.clips.set(id, updatedClip);

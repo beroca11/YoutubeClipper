@@ -233,6 +233,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...clipData,
         fileName,
         processingStatus: "pending",
+        aiVoiceOver: req.body.aiVoiceOver || false,
+        narrationScript: req.body.narrationScript || null,
+        voiceoverAdded: false,
+        voiceoverProcessing: false,
       });
 
       // Start enhanced video processing with TikTok optimization
@@ -471,8 +475,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add AI Voice Over to a clip
   app.post('/api/clips/voiceover', async (req, res) => {
+    let clipId: number | undefined;
     try {
-      const { clipId } = req.body;
+      clipId = req.body.clipId;
       console.log('[VoiceOver] Request received:', { clipId });
       if (!clipId) {
         console.error('[VoiceOver] Missing clipId');
@@ -483,6 +488,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('[VoiceOver] Clip not found:', clipId);
         return res.status(404).json({ message: 'Clip not found' });
       }
+      if (clip.voiceoverAdded) {
+        console.log('[VoiceOver] Voiceover already generated for this clip.');
+        return res.status(400).json({ message: 'Voiceover already generated for this clip.' });
+      }
+      
+      // Set voiceoverProcessing to true to prevent duplicate requests
+      await storage.updateClipStatus(clipId, 'completed', undefined, undefined, false, true);
+      
       // Fetch the associated video
       const video = await storage.getVideo(clip.videoId);
       if (!video) {
@@ -492,6 +505,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const clipPath = getClipFilePath(clip.fileName);
       const audioPath = clipPath.replace(/\.[^.]+$/, '_voiceover.mp3');
       const outputPath = clipPath.replace(/\.[^.]+$/, '_with_voiceover.mp4');
+
+      // Check if the clip file exists, if not wait a bit and retry
+      let retries = 0;
+      const maxRetries = 10;
+      while (!fs.existsSync(clipPath) && retries < maxRetries) {
+        console.log(`[VoiceOver] Clip file not found, retrying... (${retries + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+        retries++;
+      }
+      
+      if (!fs.existsSync(clipPath)) {
+        console.error('[VoiceOver] Clip file not found after retries:', clipPath);
+        return res.status(404).json({ message: 'Clip file not found' });
+      }
+
+      console.log('[VoiceOver] Clip file found, proceeding with voiceover generation');
 
       // 1. Generate narration text using AI
       console.log('[VoiceOver] Generating narration text...');
@@ -544,12 +573,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update the clip's downloadUrl and status
       const downloadUrl = `/api/clips/${clipId}/download?voiceover=1`;
-      await storage.updateClipStatus(clipId, 'completed', downloadUrl);
+      await storage.updateClipStatus(clipId, 'completed', downloadUrl, undefined, true, false);
       const updatedClip = await storage.getClip(clipId);
 
       res.json({ success: true, outputPath, downloadUrl, clip: updatedClip });
     } catch (error: any) {
       console.error('[VoiceOver] Error:', error);
+      // Set voiceoverProcessing to false on error, but only if clipId is defined
+      if (clipId) {
+        await storage.updateClipStatus(clipId, 'completed', undefined, undefined, false, false);
+      }
       res.status(500).json({ message: 'Failed to add voice over', error: error.message });
     }
   });

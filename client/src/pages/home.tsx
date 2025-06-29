@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -16,7 +16,7 @@ import AIViralAnalysis from "@/components/ai-viral-analysis";
 import ThumbnailGenerator from "@/components/thumbnail-generator";
 import type { ViralAnalysis } from "@/components/ai-viral-analysis";
 
-type AppStep = 'input' | 'analysis' | 'processing' | 'completed';
+type AppStep = 'input' | 'analysis' | 'processing' | 'voiceover' | 'completed';
 
 export default function Home() {
   const [currentStep, setCurrentStep] = useState<AppStep>('input');
@@ -27,6 +27,7 @@ export default function Home() {
   const [completedClip, setCompletedClip] = useState<ClipData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [viralAnalysis, setViralAnalysis] = useState<ViralAnalysis | null>(null);
+  const [voiceoverRequested, setVoiceoverRequested] = useState(false);
   
   const { toast } = useToast();
 
@@ -63,6 +64,7 @@ export default function Home() {
     onSuccess: (clip) => {
       setProcessingClipId(clip.id);
       setCurrentStep('processing');
+      setVoiceoverRequested(clip.aiVoiceOver || false);
       toast({
         title: "Clip creation started!",
         description: "Your video is being processed.",
@@ -80,17 +82,95 @@ export default function Home() {
   // Poll clip status when processing
   const { data: clipStatus } = useQuery({
     queryKey: [`/api/clips/${processingClipId}`],
-    enabled: !!processingClipId && currentStep === 'processing',
+    enabled: !!processingClipId && (currentStep === 'processing' || currentStep === 'voiceover'),
     refetchInterval: 1000, // Poll every second
   });
 
-  // Check if clip is completed
-  if (clipStatus && (clipStatus as ClipData).processingStatus === 'completed' && currentStep === 'processing') {
-    setCompletedClip(clipStatus as ClipData);
-    setCurrentStep('completed');
-    setProcessingClipId(null);
-    queryClient.invalidateQueries({ queryKey: [`/api/clips/${processingClipId}`] });
-  }
+  // Handle clip status changes
+  useEffect(() => {
+    if (!clipStatus || !processingClipId) return;
+
+    const clip = clipStatus as ClipData;
+    
+    if (clip.processingStatus === 'completed' && currentStep === 'processing') {
+      // Clip processing is complete, check if voiceover is needed
+      if (clip.aiVoiceOver && clip.narrationScript && !clip.voiceoverAdded && !clip.voiceoverProcessing) {
+        // Start voiceover processing
+        setCurrentStep('voiceover');
+        handleVoiceoverGeneration(clip);
+      } else {
+        // No voiceover needed, complete
+        setCompletedClip(clip);
+        setCurrentStep('completed');
+        setProcessingClipId(null);
+      }
+    } else if (clip.processingStatus === 'completed' && currentStep === 'voiceover') {
+      // Check if voiceover is complete
+      if (clip.voiceoverAdded && !clip.voiceoverProcessing) {
+        setCompletedClip(clip);
+        setCurrentStep('completed');
+        setProcessingClipId(null);
+      }
+    }
+  }, [clipStatus, currentStep, processingClipId]);
+
+  const handleVoiceoverGeneration = async (clip: ClipData) => {
+    toast({
+      title: "Adding AI Voice Over...",
+      description: "Generating narration and merging with your video.",
+    });
+    
+    try {
+      const response = await apiRequest('POST', '/api/clips/voiceover', {
+        clipId: clip.id,
+        narrationScript: clip.narrationScript,
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          // Voiceover generation started successfully
+          toast({
+            title: "Voice Over Processing",
+            description: "Your narrated video is being generated.",
+          });
+        } else {
+          throw new Error(result.message || 'Voiceover generation failed');
+        }
+      } else {
+        const errorData = await response.json();
+        if (response.status === 400 && errorData.message?.includes('already generated')) {
+          // Voiceover already exists
+          setCompletedClip({ 
+            ...clip, 
+            voiceoverAdded: true,
+            voiceoverProcessing: false 
+          });
+          setCurrentStep('completed');
+          setProcessingClipId(null);
+          toast({
+            title: "Voice Over Ready!",
+            description: "Your narrated video is already available.",
+          });
+        } else {
+          throw new Error(errorData.message || `HTTP ${response.status}`);
+        }
+      }
+    } catch (error: any) {
+      console.error('Voiceover generation failed:', error);
+      setCompletedClip({ 
+        ...clip, 
+        voiceoverProcessing: false 
+      });
+      setCurrentStep('completed');
+      setProcessingClipId(null);
+      toast({
+        title: "Voice Over Failed",
+        description: error.message || 'Failed to add AI voice over.',
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleAnalyze = (url: string) => {
     analyzeMutation.mutate(url);
@@ -109,46 +189,7 @@ export default function Home() {
   };
 
   const handleGenerateClip = async (clipData: any) => {
-    createClipMutation.mutate(clipData, {
-      onSuccess: async (clip) => {
-        setProcessingClipId(clip.id);
-        setCurrentStep('processing');
-        toast({
-          title: "Clip creation started!",
-          description: "Your video is being processed.",
-        });
-        // If AI voice over is requested, trigger the backend workflow
-        if (clipData.aiVoiceOver && clipData.narrationScript) {
-          toast({
-            title: "Adding AI Voice Over...",
-            description: "Generating narration and merging with your video.",
-          });
-          try {
-            const response = await apiRequest('POST', '/api/clips/voiceover', {
-              clipId: clip.id,
-              narrationScript: clipData.narrationScript,
-            });
-            const result = await response.json();
-            if (result.success) {
-              // Optionally, update completedClip with the new outputPath
-              setCompletedClip({ ...clip, downloadUrl: result.outputPath });
-              setCurrentStep('completed');
-              setProcessingClipId(null);
-              toast({
-                title: "AI Voice Over Complete!",
-                description: "Your narrated video is ready.",
-              });
-            }
-          } catch (error: any) {
-            toast({
-              title: "Voice Over Failed",
-              description: error.message || 'Failed to add AI voice over.',
-              variant: "destructive",
-            });
-          }
-        }
-      },
-    });
+    createClipMutation.mutate(clipData);
   };
 
   const handleCreateAnother = () => {
@@ -158,14 +199,45 @@ export default function Home() {
     setSelectedSuggestion(null);
     setProcessingClipId(null);
     setCompletedClip(null);
+    setVoiceoverRequested(false);
   };
 
-  // Calculate processing progress (mock)
-  const processingProgress = clipStatus && typeof clipStatus === 'object' && 'processingStatus' in clipStatus ? 
-    (clipStatus as ClipData).processingStatus === 'pending' ? 20 :
-    (clipStatus as ClipData).processingStatus === 'processing' ? 70 :
-    (clipStatus as ClipData).processingStatus === 'completed' ? 100 : 0
-    : 20;
+  // Calculate processing progress
+  const getProcessingProgress = () => {
+    if (!clipStatus || typeof clipStatus !== 'object' || !('processingStatus' in clipStatus)) {
+      return 20;
+    }
+
+    const clip = clipStatus as ClipData;
+    
+    if (currentStep === 'processing') {
+      switch (clip.processingStatus) {
+        case 'pending': return 20;
+        case 'processing': return 70;
+        case 'completed': return 100;
+        default: return 20;
+      }
+    } else if (currentStep === 'voiceover') {
+      if (clip.voiceoverProcessing) {
+        return 85; // Voiceover is being processed
+      } else if (clip.voiceoverAdded) {
+        return 100; // Voiceover is complete
+      } else {
+        return 80; // Waiting for voiceover to start
+      }
+    }
+    
+    return 20;
+  };
+
+  const getProcessingStep = () => {
+    if (currentStep === 'processing') {
+      return 'processing';
+    } else if (currentStep === 'voiceover') {
+      return 'voiceover';
+    }
+    return 'processing';
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
@@ -210,8 +282,12 @@ export default function Home() {
           </>
         )}
 
-        {currentStep === 'processing' && (
-          <ProcessingStatus progress={processingProgress} />
+        {(currentStep === 'processing' || currentStep === 'voiceover') && (
+          <ProcessingStatus 
+            progress={getProcessingProgress()} 
+            step={getProcessingStep()}
+            voiceoverRequested={voiceoverRequested}
+          />
         )}
 
         {currentStep === 'completed' && completedClip && (
