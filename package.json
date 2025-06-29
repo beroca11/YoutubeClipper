@@ -11,7 +11,7 @@
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
     "dev:open": "cross-env NODE_ENV=development tsx server/index.ts & timeout 3 && start http://localhost:5000",
     "open": "start http://localhost:5000",
-    "build": "npm run build:client && npm run build:server",
+    "build": "node build.js",
     "build:client": "vite build",
     "build:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "cross-env NODE_ENV=production node dist/index.js",

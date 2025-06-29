@@ -3,7 +3,7 @@ services:
     name: youtube-clipper
     env: node
     plan: starter
-    buildCommand: npm ci && npm run build
+    buildCommand: npm install && node build.js
     startCommand: npm start
     envVars:
       - key: NODE_ENV
