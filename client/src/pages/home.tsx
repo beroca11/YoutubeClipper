@@ -13,6 +13,7 @@ import ProcessingStatus from "@/components/processing-status";
 import DownloadSection from "@/components/download-section";
 import FeaturesSection from "@/components/features-section";
 import AIViralAnalysis from "@/components/ai-viral-analysis";
+import ThumbnailGenerator from "@/components/thumbnail-generator";
 
 type AppStep = 'input' | 'analysis' | 'processing' | 'completed';
 
@@ -24,6 +25,7 @@ export default function Home() {
   const [processingClipId, setProcessingClipId] = useState<number | null>(null);
   const [completedClip, setCompletedClip] = useState<ClipData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [viralAnalysis, setViralAnalysis] = useState(null);
   
   const { toast } = useToast();
 
@@ -126,21 +128,30 @@ export default function Home() {
     : 20;
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <Header />
       
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent mb-4">
+            Transform Your Videos with AI
+          </h1>
+          <p className="text-xl text-slate-600 max-w-3xl mx-auto">
+            Create viral content, optimize for social media, and generate professional thumbnails with our advanced AI-powered platform
+          </p>
+        </div>
+
         <UrlInputSection 
           onAnalyze={handleAnalyze}
           isLoading={analyzeMutation.isPending}
         />
 
         {currentStep !== 'input' && videoData && (
-          <VideoAnalysis video={videoData} />
-        )}
-
-        {currentStep !== 'input' && videoData && (
-          <AIViralAnalysis video={videoData} />
+          <div className="space-y-8">
+            <VideoAnalysis video={videoData} />
+            <AIViralAnalysis video={videoData} onAnalysis={setViralAnalysis} />
+            <ThumbnailGenerator video={videoData} thumbnailSuggestion={viralAnalysis?.thumbnailSuggestion} />
+          </div>
         )}
 
         {currentStep === 'analysis' && suggestions.length > 0 && (

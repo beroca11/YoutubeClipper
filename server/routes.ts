@@ -333,6 +333,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // AI thumbnail generation endpoint
+  app.post("/api/ai/generate-thumbnail", async (req, res) => {
+    try {
+      const { videoId, template, design } = req.body;
+      // Get video data
+      const video = await storage.getVideo(videoId);
+      if (!video) {
+        return res.status(404).json({ message: "Video not found" });
+      }
+      // Use thumbnailSuggestion or video title as prompt
+      const prompt = design?.title || video.title || "Viral video thumbnail";
+      // Use OpenAI DALL·E to generate a thumbnail
+      if (process.env.OPENAI_API_KEY) {
+        const OpenAI = (await import('openai')).default;
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const dalleResponse = await openai.images.generate({
+          model: "dall-e-3",
+          prompt: `Create a vibrant, eye-catching YouTube/TikTok/Instagram video thumbnail for: ${prompt}. Use bold colors, clear subject, and professional design. No text overlays.`,
+          n: 1,
+          size: "1024x1024"
+        });
+        const imageUrls = Array.isArray(dalleResponse.data) ? dalleResponse.data.map(img => img.url).filter(Boolean) : [];
+        return res.json({ thumbnails: imageUrls });
+      }
+      // Fallback: return placeholder
+      const mockThumbnails = [
+        `https://via.placeholder.com/1280x720/ff6b6b/ffffff?text=${encodeURIComponent(prompt)}`
+      ];
+      res.json({ thumbnails: mockThumbnails });
+    } catch (error) {
+      console.error("Error generating thumbnails:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Watermark management endpoints
   app.get("/api/watermarks", async (req, res) => {
     try {

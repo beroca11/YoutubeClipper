@@ -76,57 +76,15 @@ export class AIAgent {
         - Channel: ${videoData.channelName || 'Unknown'}
         - Views: ${videoData.viewCount || 'Unknown'}
 
-        Provide a comprehensive viral analysis with the following detailed breakdown:
+        Provide a concise, highly readable, and well-structured viral analysis of about 500 words with the following format:
 
-        1. VIRALITY SCORE (0-1): Calculate based on:
-           - Emotional appeal and relatability
-           - Trending topic relevance
-           - Shareability potential
-           - Visual/audio quality
-           - Hook strength
-           - Call-to-action effectiveness
+        1. Start with a brief summary in 2–3 paragraphs, using clear section headings for each part of the analysis (e.g., Virality Score, Viral Factors, Target Audience, etc.).
+        2. After the summary, include a section titled 'Key Highlights' with 5–8 bulleted points (use dashes or hyphens for bullets, not asterisks or symbols).
+        3. Each bullet should be a single, impactful insight or actionable recommendation.
+        4. Do NOT use asterisks, hashtags, or markdown. Use only clean, professional formatting.
+        5. Write in a friendly, expert, and encouraging tone.
 
-        2. VIRAL FACTORS: Identify specific elements that make this content viral:
-           - Emotional triggers (joy, surprise, anger, fear, sadness)
-           - Trending topics and hashtags
-           - Relatable moments or situations
-           - Educational value
-           - Entertainment factor
-           - Controversy or debate potential
-
-        3. TARGET AUDIENCE: Define the primary and secondary audiences:
-           - Age groups
-           - Interests and hobbies
-           - Geographic locations
-           - Social media platforms they use
-           - Content consumption patterns
-
-        4. OPTIMAL POSTING STRATEGY:
-           - Best posting times for different platforms
-           - Day of week recommendations
-           - Frequency suggestions
-           - Cross-platform posting strategy
-
-        5. HASHTAG STRATEGY:
-           - Trending hashtags in the niche
-           - Branded hashtags
-           - Community hashtags
-           - Viral hashtag combinations
-
-        6. CONTENT OPTIMIZATION:
-           - Hook suggestions for first 3 seconds
-           - Title variations (5 different options)
-           - Thumbnail design recommendations
-           - Description templates
-           - Call-to-action suggestions
-
-        7. ENGAGEMENT PREDICTION:
-           - Expected view count
-           - Like/comment/share ratios
-           - Follower growth potential
-           - Viral spread timeline
-
-        Focus on creating content optimized for vertical (9:16) mobile-first formats like TikTok, Instagram Reels, and YouTube Shorts. Consider current trends, platform algorithms, and user behavior patterns.
+        IMPORTANT: The output should be about 500 words, easy to read, and visually scannable. Section headings should be clear and the 'Key Highlights' section should be easy to find and read.
       `;
 
       const completion = await openai.chat.completions.create({
@@ -134,7 +92,7 @@ export class AIAgent {
         messages: [
           {
             role: "system",
-            content: "You are a world-class social media expert with deep knowledge of viral content creation, platform algorithms, and user psychology. You understand what makes content go viral across TikTok, Instagram Reels, YouTube Shorts, and other social platforms. Provide detailed, actionable insights that creators can immediately implement."
+            content: "You are a world-class social media expert with deep knowledge of viral content creation, platform algorithms, and user psychology. You understand what makes content go viral across TikTok, Instagram Reels, YouTube Shorts, and other social platforms. Provide detailed, actionable insights that creators can immediately implement. Never use asterisks, hashtags, or markdown. Use professional, clean formatting. Write in paragraphs, not lists. Use clear section headings and a 'Key Highlights' section as instructed."
           },
           {
             role: "user",
@@ -142,13 +100,29 @@ export class AIAgent {
           }
         ],
         temperature: 0.8,
-        max_tokens: 2000
+        max_tokens: 1200
       });
 
       const response = completion.choices[0]?.message?.content || '';
-      
-      // Parse the AI response into structured data
-      return this.parseViralAnalysis(response, videoData);
+      // Clean the response by removing asterisks and hashtags
+      const cleanResponse = response.replace(/[*#]/g, '').replace(/\s+/g, ' ').trim();
+      // Return the full clean response as the description
+      return {
+        viralityScore: Math.random() * 0.4 + 0.6,
+        viralFactors: [
+          'Emotional appeal',
+          'Trending topic',
+          'Shareable content',
+          'Visual impact'
+        ],
+        targetAudience: ['Gen Z', 'Millennials'],
+        bestPostingTime: '6-9 PM EST',
+        hashtags: ['viral', 'trending', 'fyp', 'shorts'],
+        description: cleanResponse,
+        title: `${videoData.title} - Must Watch`,
+        thumbnailSuggestion: 'High contrast, bold text, emotional expression',
+        engagementPrediction: Math.random() * 40 + 60
+      };
       
     } catch (error) {
       console.error('Error analyzing video for virality:', error);
@@ -214,7 +188,11 @@ export class AIAgent {
            - Follow-up content ideas
            - Collaboration opportunities
 
-        Make this analysis engaging, actionable, and optimized for social media creators who want to maximize their content's impact.
+        IMPORTANT:
+        - Do not use asterisks (*) or hashtags (#) in any generated content
+        - Use professional, clean formatting
+        - Make this analysis engaging, actionable, and optimized for social media creators who want to maximize their content's impact
+        - Provide specific, actionable recommendations
       `;
 
       const completion = await openai.chat.completions.create({
@@ -222,7 +200,7 @@ export class AIAgent {
         messages: [
           {
             role: "system",
-            content: "You are a content strategy expert who excels at breaking down complex topics into engaging, shareable insights. You understand how to make content more viral, relatable, and impactful across all social media platforms."
+            content: "You are a content strategy expert who excels at breaking down complex topics into engaging, shareable insights. You understand how to make content more viral, relatable, and impactful across all social media platforms. Never use asterisks or hashtags in your responses. Use professional, clean formatting."
           },
           {
             role: "user",
@@ -275,12 +253,12 @@ export class AIAgent {
            - Ending optimization for algorithm
            - Cross-promotion opportunities
 
-        3. HASHTAG STRATEGY:
-           - Trending hashtags on ${platform}
-           - Niche-specific hashtags
-           - Branded hashtag suggestions
-           - Hashtag combinations for maximum reach
-           - Hashtag placement optimization
+        3. KEYWORD STRATEGY:
+           - Trending keywords on ${platform}
+           - Niche-specific keywords
+           - Branded keyword suggestions
+           - Keyword combinations for maximum reach
+           - Keyword placement optimization
 
         4. POSTING STRATEGY:
            - Best posting times for ${platform}
@@ -310,7 +288,11 @@ export class AIAgent {
            - Transition effects
            - Color scheme optimization
 
-        Focus on creating content that's perfectly optimized for ${platform}'s unique algorithm, user behavior, and content format requirements. Provide specific, actionable recommendations that creators can implement immediately.
+        IMPORTANT:
+        - Do not use asterisks (*) or hashtags (#) in any generated content
+        - Use professional, clean formatting
+        - Focus on creating content that's perfectly optimized for ${platform}'s unique algorithm, user behavior, and content format requirements
+        - Provide specific, actionable recommendations that creators can implement immediately
       `;
 
       const completion = await openai.chat.completions.create({
@@ -318,7 +300,7 @@ export class AIAgent {
         messages: [
           {
             role: "system",
-            content: `You are a ${platform} expert with deep knowledge of the platform's algorithm, user behavior, and content optimization strategies. You understand what makes content perform well on ${platform} and how to maximize engagement and reach.`
+            content: `You are a ${platform} expert with deep knowledge of the platform's algorithm, user behavior, and content optimization strategies. You understand what makes content perform well on ${platform} and how to maximize engagement and reach. Never use asterisks or hashtags in your responses. Use professional, clean formatting.`
           },
           {
             role: "user",
@@ -340,7 +322,9 @@ export class AIAgent {
   }
 
   private parseViralAnalysis(response: string, videoData: Video): ViralAnalysis {
-    // Simple parsing - in a real app, you'd use more sophisticated parsing
+    // Clean the response by removing asterisks and hashtags
+    const cleanResponse = response.replace(/[*#]/g, '').replace(/\s+/g, ' ').trim();
+    
     const viralityScore = Math.random() * 0.4 + 0.6; // 0.6-1.0 range
     const viralFactors = [
       'Emotional appeal',
@@ -354,17 +338,20 @@ export class AIAgent {
       viralFactors,
       targetAudience: ['Gen Z', 'Millennials'],
       bestPostingTime: '6-9 PM EST',
-      hashtags: ['#viral', '#trending', '#fyp', '#shorts'],
-      description: response.substring(0, 200) + '...',
-      title: `🔥 ${videoData.title} - MUST WATCH!`,
+      hashtags: ['viral', 'trending', 'fyp', 'shorts'],
+      description: cleanResponse.substring(0, 200) + '...',
+      title: `${videoData.title} - Must Watch`,
       thumbnailSuggestion: 'High contrast, bold text, emotional expression',
       engagementPrediction: viralityScore * 100
     };
   }
 
   private parseContentExplanation(response: string): ContentExplanation {
+    // Clean the response by removing asterisks and hashtags
+    const cleanResponse = response.replace(/[*#]/g, '').replace(/\s+/g, ' ').trim();
+    
     return {
-      summary: response.substring(0, 150) + '...',
+      summary: cleanResponse.substring(0, 150) + '...',
       keyPoints: [
         'Key insight 1',
         'Key insight 2', 
@@ -372,17 +359,20 @@ export class AIAgent {
       ],
       emotionalTone: 'Exciting and engaging',
       trendingTopics: ['Technology', 'Innovation'],
-      callToAction: 'Share this with friends!'
+      callToAction: 'Share this with friends'
     };
   }
 
   private parseSocialMediaOptimization(response: string, platform: string): SocialMediaOptimization {
+    // Clean the response by removing asterisks and hashtags
+    const cleanResponse = response.replace(/[*#]/g, '').replace(/\s+/g, ' ').trim();
+    
     return {
       platform,
       optimalLength: platform === 'TikTok' ? 60 : 90,
-      hook: 'You won\'t believe what happens next!',
-      description: response.substring(0, 200) + '...',
-      hashtags: [`#${platform.toLowerCase()}`, '#viral', '#trending'],
+      hook: 'You won\'t believe what happens next',
+      description: cleanResponse.substring(0, 200) + '...',
+      hashtags: [platform.toLowerCase(), 'viral', 'trending'],
       postingTime: '6-9 PM EST'
     };
   }
@@ -393,7 +383,7 @@ export class AIAgent {
       viralFactors: ['Engaging content', 'Visual appeal'],
       targetAudience: ['General audience'],
       bestPostingTime: '6-9 PM EST',
-      hashtags: ['#viral', '#trending'],
+      hashtags: ['viral', 'trending'],
       description: `Check out this amazing video: ${videoData.title}`,
       title: videoData.title,
       thumbnailSuggestion: 'Use bright colors and bold text',
@@ -407,7 +397,7 @@ export class AIAgent {
       keyPoints: ['Point 1', 'Point 2', 'Point 3'],
       emotionalTone: 'Neutral',
       trendingTopics: ['General'],
-      callToAction: 'Watch and share!'
+      callToAction: 'Watch and share'
     };
   }
 
@@ -415,9 +405,9 @@ export class AIAgent {
     return {
       platform,
       optimalLength: 60,
-      hook: 'Amazing content ahead!',
-      description: 'Check out this incredible video!',
-      hashtags: ['#viral', '#trending'],
+      hook: 'Amazing content ahead',
+      description: 'Check out this incredible video',
+      hashtags: ['viral', 'trending'],
       postingTime: '6-9 PM EST'
     };
   }
