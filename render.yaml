@@ -3,7 +3,7 @@ services:
     name: youtube-clipper
     env: node
     plan: starter
-    buildCommand: npm install && node build.js
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -13,4 +13,5 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     branch: main
-    numInstances: 1 
+    numInstances: 1
+    nodeVersion: 20.18.0 
