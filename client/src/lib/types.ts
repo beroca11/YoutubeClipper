@@ -37,6 +37,7 @@ export interface ClipData {
   downloadUrl?: string;
   isAiGenerated: boolean;
   processingStatus: string;
+  isDemoVideo?: boolean;
   // Video editing features
   zoomLevel?: number;
   cropX?: number;

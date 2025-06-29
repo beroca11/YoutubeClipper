@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { Cog, Check, Loader2, Circle, Mic } from "lucide-react";
+import { Cog, Check, Loader2, Circle, Mic, AlertTriangle } from "lucide-react";
 
 interface ProcessingStatusProps {
   progress: number;
   step: 'processing' | 'voiceover';
   voiceoverRequested: boolean;
+  isDemoVideo?: boolean;
 }
 
-export default function ProcessingStatus({ progress, step, voiceoverRequested }: ProcessingStatusProps) {
+export default function ProcessingStatus({ progress, step, voiceoverRequested, isDemoVideo }: ProcessingStatusProps) {
   const [animatedProgress, setAnimatedProgress] = useState(0);
 
   useEffect(() => {
@@ -40,6 +41,18 @@ export default function ProcessingStatus({ progress, step, voiceoverRequested }:
   return (
     <section className="mb-12">
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 text-center">
+        {isDemoVideo && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-600" />
+              <span className="font-semibold text-yellow-800">Demo Video Created</span>
+            </div>
+            <p className="text-sm text-yellow-700">
+              YouTube rate limiting prevented video download. A demo video has been created instead.
+            </p>
+          </div>
+        )}
+        
         <div className="mb-6">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-red-50 rounded-full mb-4">
             {step === 'voiceover' ? (

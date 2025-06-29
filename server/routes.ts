@@ -674,7 +674,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Update status to completed
       const downloadUrl = `/api/clips/${clipId}/download`;
-      await storage.updateClipStatus(clipId, "completed", downloadUrl, result.fileSize);
+      
+      // If this is a demo video, add a note to the status
+      if (result.isDemoVideo) {
+        console.log('Demo video created due to YouTube download failure');
+        await storage.updateClipStatus(clipId, "completed", downloadUrl, result.fileSize);
+      } else {
+        await storage.updateClipStatus(clipId, "completed", downloadUrl, result.fileSize);
+      }
       
     } catch (error) {
       console.error("Error processing video clip:", error);

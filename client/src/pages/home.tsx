@@ -287,6 +287,7 @@ export default function Home() {
             progress={getProcessingProgress()} 
             step={getProcessingStep()}
             voiceoverRequested={voiceoverRequested}
+            isDemoVideo={(clipStatus as ClipData)?.isDemoVideo}
           />
         )}
 

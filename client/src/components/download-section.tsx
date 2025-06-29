@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ClipData } from "@/lib/types";
-import { Check, Download, Share, Plus, Loader2 } from "lucide-react";
+import { Check, Download, Share, Plus, Loader2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface DownloadSectionProps {
@@ -85,6 +85,18 @@ export default function DownloadSection({ clip, onCreateAnother }: DownloadSecti
   return (
     <section className="mb-12">
       <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-2xl border border-green-200 p-8 text-center">
+        {clip.isDemoVideo && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-600" />
+              <span className="font-semibold text-yellow-800">Demo Video</span>
+            </div>
+            <p className="text-sm text-yellow-700">
+              This is a demo video created due to YouTube rate limiting. The original video could not be downloaded.
+            </p>
+          </div>
+        )}
+        
         <div className="mb-6">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-4">
             <Check className="text-green-600 text-3xl h-12 w-12" />
